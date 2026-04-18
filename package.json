@@ -1,0 +1,35 @@
+{
+  "name": "the-roundhouse-wedding",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Roundhouse wedding venue website — Next.js, Node.js, Supabase",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@react-pdf/renderer": "^4.3.2",
+    "@supabase/supabase-js": "latest",
+    "autoprefixer": "^10.4.27",
+    "next": "^16.2.0",
+    "postcss": "^8.5.8",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "recharts": "^3.8.0",
+    "swr": "^2.4.1",
+    "tailwindcss": "^3.4.19"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^10.0.3",
+    "eslint-config-next": "^16.2.0",
+    "typescript": "^5.9.3"
+  }
+}

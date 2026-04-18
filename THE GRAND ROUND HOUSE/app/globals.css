@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --champagne: #f5ebe0;
+  --gold: #b8860b;
+  --gold-light: #d4af37;
+  --charcoal: #141414;
+  --ivory: #faf8f5;
+  --ink: #050505;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-ivory text-charcoal antialiased;
+}
+
+/* Very subtle paper texture overlay for luxury feel */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  opacity: 0.4;
+}
+
+@layer components {
+  .btn-primary {
+    @apply relative inline-flex items-center justify-center overflow-hidden rounded-sm bg-gradient-to-b from-gold to-gold-dark px-8 py-4 text-sm font-medium uppercase tracking-[0.25em] text-ivory transition-all duration-500 focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-ivory;
+    box-shadow: 0 1px 0 0 rgba(255,255,255,0.15) inset, 0 4px 20px -4px rgba(184,134,11,0.4);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 1px 0 0 rgba(255,255,255,0.2) inset, 0 8px 32px -8px rgba(184,134,11,0.5);
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center rounded-sm border border-gold/70 bg-transparent px-8 py-4 text-sm font-medium uppercase tracking-[0.25em] text-charcoal transition-all duration-500 hover:bg-gold/5 hover:border-gold focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-ivory;
+  }
+  .btn-outline-light {
+    @apply border-ivory/80 text-ivory hover:bg-ivory/10 hover:border-ivory;
+  }
+  .section-heading {
+    @apply font-serif text-3xl font-semibold tracking-tight text-charcoal md:text-4xl lg:text-5xl xl:text-6xl;
+  }
+  .section-sub {
+    @apply mt-4 text-lg leading-relaxed text-charcoal/70 md:text-xl;
+  }
+  .divider-gold {
+    @apply mx-auto h-px w-28 bg-gradient-to-r from-transparent via-gold to-transparent;
+  }
+  .divider-gold-thick {
+    @apply mx-auto h-[2px] w-20 rounded-full bg-gradient-to-r from-transparent via-gold-light to-transparent;
+  }
+  /* Luxury card: soft gold top edge + deep shadow */
+  .luxury-card {
+    @apply relative overflow-hidden rounded-sm border border-charcoal/[0.06] bg-cream shadow-luxury transition-all duration-500;
+  }
+  .luxury-card::before {
+    content: "";
+    @apply absolute left-0 right-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/50 to-transparent opacity-80;
+  }
+  .luxury-card:hover {
+    @apply border-gold/20;
+    box-shadow: 0 0 0 1px rgba(212,175,55,0.2), 0 16px 48px -12px rgba(0,0,0,0.08), 0 32px 80px -24px rgba(184,134,11,0.12);
+  }
+  .luxury-card:hover::before {
+    @apply via-gold-light opacity-100;
+  }
+}
+
+.flourish::after {
+  content: "◆";
+  display: block;
+  font-size: 0.4em;
+  letter-spacing: 0.6em;
+  color: theme("colors.gold / 0.5");
+  margin-top: 0.75rem;
+}
