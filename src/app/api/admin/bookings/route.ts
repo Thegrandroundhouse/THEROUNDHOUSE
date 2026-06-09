@@ -254,6 +254,7 @@ export async function POST(request: Request) {
           : body.record_deposit_received
             ? "Deposit"
             : "Payment",
+      sync_milestones: body.sync_milestones !== false,
     });
   } catch (payErr) {
     console.error("setupBookingPayments:", payErr);

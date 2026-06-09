@@ -12173,6 +12173,159 @@ section.bg-ink p.section-sub,
   color: var(--color-text-muted);
 }
 
+/* Create booking — payments & instalments */
+.admin-bk-pay-card .admin-section-title {
+  margin-bottom: 0.35rem;
+}
+.admin-bk-pay-lead {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+  max-width: 42rem;
+}
+.admin-bk-pay-hint {
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  border: 1px dashed var(--color-border);
+  background: var(--color-surface);
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+.admin-bk-pay-preview {
+  margin-bottom: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+.admin-bk-pay-preview-title {
+  margin: 0;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-gold-dark);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+.admin-bk-pay-preview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.admin-bk-pay-preview-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.85rem;
+}
+.admin-bk-pay-preview-row:last-child {
+  border-bottom: none;
+}
+.admin-bk-pay-preview-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: rgba(30, 58, 95, 0.08);
+  color: var(--color-gold-dark);
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+.admin-bk-pay-preview-label {
+  font-weight: 600;
+  color: var(--color-text);
+  min-width: 0;
+}
+.admin-bk-pay-preview-amt {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+.admin-bk-pay-money {
+  margin-bottom: 0.85rem;
+}
+.admin-bk-pay-record {
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--color-border);
+}
+.admin-bk-pay-record-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  cursor: pointer;
+}
+.admin-bk-pay-record-toggle input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+  accent-color: var(--color-gold-dark);
+}
+.admin-bk-pay-record-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.admin-bk-pay-record-toggle-text strong {
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+.admin-bk-pay-record-toggle-text span {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+.admin-bk-pay-record-panel {
+  margin-top: 0.85rem;
+  padding: 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(30, 58, 95, 0.12);
+  background: linear-gradient(165deg, rgba(30, 58, 95, 0.04) 0%, var(--color-bg) 70%);
+}
+.admin-bk-pay-quick {
+  margin: 0.65rem 0 0.75rem;
+}
+.admin-bk-pay-quick-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+.admin-bk-pay-quick-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.admin-bk-pay-sync {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.admin-bk-pay-sync input {
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+  accent-color: var(--color-gold-dark);
+}
+
 .admin-bkd-agreements-head {
   margin-bottom: 1rem;
 }

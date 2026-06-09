@@ -11,6 +11,7 @@ import {
   BOOKING_COMPLETED_FUTURE_EVENT_MESSAGE,
   isEventDateInFutureLondon,
 } from "@/lib/booking-status-rules";
+import { BOOKING_PAYMENT_LABELS, hireInstalmentPreview, firstInstalmentCents } from "@/lib/booking-payment-labels";
 
 const STATUS_OPTIONS: BookingStatus[] = ["pending", "confirmed", "cancelled", "completed"];
 
@@ -96,8 +97,9 @@ function NewBookingForm() {
     deposit_pounds: "",
     balance_pounds: "",
     payment_received_pounds: "",
-    record_deposit_received: false,
-    payment_received_label: "Deposit",
+    record_payment_now: false,
+    sync_instalments: true,
+    payment_received_label: "On Booking Confirmation",
     special_requirements: "",
     notes: "",
     enquiry_id: "",
@@ -324,6 +326,16 @@ function NewBookingForm() {
     return centsToPounds(Math.max(0, total - deposit));
   }, [form.total_pounds, form.deposit_pounds]);
 
+  const contractTotalCents = useMemo(() => poundsToCents(form.total_pounds), [form.total_pounds]);
+  const instalmentPreview = useMemo(
+    () => (contractTotalCents != null && contractTotalCents > 0 ? hireInstalmentPreview(contractTotalCents) : []),
+    [contractTotalCents],
+  );
+  const instalmentCents = useMemo(
+    () => (contractTotalCents != null && contractTotalCents > 0 ? firstInstalmentCents(contractTotalCents) : null),
+    [contractTotalCents],
+  );
+
   useEffect(() => {
     if (!form.balance_pounds.trim() && computedBalancePounds) {
       setForm((f) => ({ ...f, balance_pounds: computedBalancePounds }));
@@ -372,7 +384,13 @@ function NewBookingForm() {
     const total_cents = poundsToCents(form.total_pounds);
     const deposit_cents = poundsToCents(form.deposit_pounds);
     const balance_cents = poundsToCents(form.balance_pounds || computedBalancePounds);
-    const payment_received_cents = poundsToCents(form.payment_received_pounds);
+    const payment_received_cents = form.record_payment_now ? poundsToCents(form.payment_received_pounds) : null;
+    if (form.record_payment_now && (!payment_received_cents || payment_received_cents <= 0)) {
+      const msg = "Enter a valid payment amount, or turn off “Record payment now”.";
+      setFormError(msg);
+      await alert(msg, { title: "Payment amount required" });
+      return;
+    }
     setSaving(true);
     try {
       const body: Record<string, unknown> = {
@@ -387,14 +405,15 @@ function NewBookingForm() {
           total_cents,
           deposit_cents,
           balance_cents,
-          record_deposit_received: form.record_deposit_received,
+          record_deposit_received:
+            form.record_payment_now &&
+            form.payment_received_label === "Deposit" &&
+            deposit_cents != null &&
+            payment_received_cents === deposit_cents,
           payment_received_cents:
-            payment_received_cents && payment_received_cents > 0
-              ? payment_received_cents
-              : form.record_deposit_received && deposit_cents
-                ? deposit_cents
-                : null,
+            payment_received_cents && payment_received_cents > 0 ? payment_received_cents : null,
           payment_received_label: form.payment_received_label,
+          sync_milestones: form.sync_instalments,
           special_requirements: form.special_requirements || null,
           notes: form.notes || null,
           enquiry_id: form.enquiry_id || null,
@@ -778,23 +797,42 @@ function NewBookingForm() {
           </div>
         </section>
 
-        <section className="admin-card">
-          <h2 className="admin-section-title">Deposit & balance</h2>
-          <div className="admin-form-grid">
+        <section className="admin-card admin-bk-pay-card">
+          <div className="admin-bk-pay-head">
+            <div>
+              <h2 className="admin-section-title">Payments &amp; instalments</h2>
+              <p className="admin-bk-pay-lead">
+                Sets the hire contract 4×25% schedule on the booking summary. Record money received now if the client
+                has already paid.
+              </p>
+            </div>
+          </div>
+
+          {instalmentPreview.length > 0 ? (
+            <div className="admin-bk-pay-preview">
+              <p className="admin-bk-pay-preview-title">Instalment schedule (from contract total)</p>
+              <ul className="admin-bk-pay-preview-list">
+                {instalmentPreview.map((row, i) => (
+                  <li key={row.label} className="admin-bk-pay-preview-row">
+                    <span className="admin-bk-pay-preview-num">{i + 1}</span>
+                    <span className="admin-bk-pay-preview-label">{row.label}</span>
+                    <span className="admin-bk-pay-preview-amt">{gbp(row.amountCents)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="admin-bk-pay-hint">Enter a contract total above to preview the 4 instalments.</p>
+          )}
+
+          <div className="admin-form-grid admin-bk-pay-money">
             <div className="admin-form-group">
               <label>Deposit (£)</label>
               <input
                 type="text"
                 inputMode="decimal"
                 value={form.deposit_pounds}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    deposit_pounds: e.target.value,
-                    record_deposit_received:
-                      f.record_deposit_received && !e.target.value ? false : f.record_deposit_received,
-                  }))
-                }
+                onChange={(e) => setForm((f) => ({ ...f, deposit_pounds: e.target.value }))}
                 placeholder="0.00"
               />
             </div>
@@ -808,77 +846,142 @@ function NewBookingForm() {
                 placeholder={computedBalancePounds || "0.00"}
               />
               {computedBalancePounds ? (
-                <span className="admin-vnd-new-hint">Suggested from total − deposit: {computedBalancePounds}</span>
+                <span className="admin-vnd-new-hint">Suggested: total − deposit = £{computedBalancePounds}</span>
               ) : null}
             </div>
           </div>
 
-          <div className="admin-form-group admin-form-full" style={{ marginTop: "0.75rem" }}>
-            <h3 className="admin-section-title" style={{ fontSize: "0.95rem", marginBottom: "0.5rem" }}>
-              Payment already received
-            </h3>
-            <p className="admin-vnd-new-hint" style={{ marginTop: 0 }}>
-              If the client has already paid (deposit or full hall hire), record it now — creates the payment ledger entry
-              and marks milestones paid.
-            </p>
-          </div>
-          <div className="admin-form-grid">
-            <div className="admin-form-group">
-              <label>Amount received (£)</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={form.payment_received_pounds}
-                onChange={(e) => setForm((f) => ({ ...f, payment_received_pounds: e.target.value }))}
-                placeholder="0.00"
-              />
-            </div>
-            <div className="admin-form-group">
-              <label>Payment type</label>
-              <select
-                value={form.payment_received_label}
-                onChange={(e) => setForm((f) => ({ ...f, payment_received_label: e.target.value }))}
-              >
-                <option value="Deposit">Deposit</option>
-                <option value="Instalment">Instalment</option>
-                <option value="Full hall hire">Full hall hire</option>
-                <option value="Balance">Balance</option>
-              </select>
-            </div>
-          </div>
-          <div className="admin-bkd-contract-checks" style={{ marginTop: "0.5rem" }}>
-            <label className="admin-pkg-slot-chip admin-hire-settings-chip">
+          <div className="admin-bk-pay-record">
+            <label className="admin-bk-pay-record-toggle">
               <input
                 type="checkbox"
-                checked={form.record_deposit_received}
-                onChange={(e) => {
-                  const checked = e.target.checked;
+                checked={form.record_payment_now}
+                onChange={(e) =>
                   setForm((f) => ({
                     ...f,
-                    record_deposit_received: checked,
+                    record_payment_now: e.target.checked,
                     payment_received_pounds:
-                      checked && f.deposit_pounds.trim() ? f.deposit_pounds : f.payment_received_pounds,
-                    payment_received_label: checked ? "Deposit" : f.payment_received_label,
-                  }));
-                }}
-              />
-              <span>Deposit received now (same as deposit £ above)</span>
-            </label>
-            {form.total_pounds.trim() ? (
-              <button
-                type="button"
-                className="admin-btn admin-btn-ghost admin-btn-sm"
-                onClick={() =>
-                  setForm((f) => ({
-                    ...f,
-                    payment_received_pounds: f.total_pounds,
-                    payment_received_label: "Full hall hire",
-                    record_deposit_received: false,
+                      e.target.checked && !f.payment_received_pounds.trim() && instalmentCents
+                        ? centsToPounds(instalmentCents)
+                        : f.payment_received_pounds,
+                    payment_received_label:
+                      e.target.checked && f.payment_received_label === "Deposit" && instalmentCents
+                        ? "On Booking Confirmation"
+                        : f.payment_received_label,
                   }))
                 }
-              >
-                Hall fully paid — use total £{form.total_pounds}
-              </button>
+              />
+              <span className="admin-bk-pay-record-toggle-text">
+                <strong>Record payment now</strong>
+                <span>Adds a ledger entry and can mark instalments paid in order.</span>
+              </span>
+            </label>
+
+            {form.record_payment_now ? (
+              <div className="admin-bk-pay-record-panel">
+                <div className="admin-form-grid">
+                  <div className="admin-form-group">
+                    <label>Amount received (£)</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={form.payment_received_pounds}
+                      onChange={(e) => setForm((f) => ({ ...f, payment_received_pounds: e.target.value }))}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="admin-form-group">
+                    <label>Payment type</label>
+                    <select
+                      value={form.payment_received_label}
+                      onChange={(e) => setForm((f) => ({ ...f, payment_received_label: e.target.value }))}
+                    >
+                      {BOOKING_PAYMENT_LABELS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="admin-bk-pay-quick">
+                  <span className="admin-bk-pay-quick-label">Quick fill</span>
+                  <div className="admin-bk-pay-quick-btns">
+                    {form.deposit_pounds.trim() ? (
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-ghost admin-btn-sm"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            payment_received_pounds: f.deposit_pounds,
+                            payment_received_label: "Deposit",
+                          }))
+                        }
+                      >
+                        Deposit (£{form.deposit_pounds})
+                      </button>
+                    ) : null}
+                    {instalmentCents ? (
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-ghost admin-btn-sm"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            payment_received_pounds: centsToPounds(instalmentCents),
+                            payment_received_label: "On Booking Confirmation",
+                          }))
+                        }
+                      >
+                        25% instalment ({gbp(instalmentCents)})
+                      </button>
+                    ) : null}
+                    {computedBalancePounds ? (
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-ghost admin-btn-sm"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            payment_received_pounds: computedBalancePounds,
+                            payment_received_label: "Balance",
+                          }))
+                        }
+                      >
+                        Balance (£{computedBalancePounds})
+                      </button>
+                    ) : null}
+                    {form.total_pounds.trim() ? (
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-ghost admin-btn-sm"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            payment_received_pounds: f.total_pounds,
+                            payment_received_label: "Full hall hire",
+                          }))
+                        }
+                      >
+                        Full total (£{form.total_pounds})
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <label className="admin-bk-pay-sync">
+                  <input
+                    type="checkbox"
+                    checked={form.sync_instalments}
+                    onChange={(e) => setForm((f) => ({ ...f, sync_instalments: e.target.checked }))}
+                  />
+                  <span>
+                    Mark hire contract instalments as paid in order (creates 4×25% schedule if missing)
+                  </span>
+                </label>
+              </div>
             ) : null}
           </div>
         </section>

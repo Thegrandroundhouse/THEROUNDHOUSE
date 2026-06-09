@@ -12,6 +12,8 @@ export type SetupBookingPaymentsInput = {
   balance_cents: number | null;
   received_cents?: number | null;
   received_label?: string;
+  /** When false, ledger entry is created but instalments are not marked paid. Default true. */
+  sync_milestones?: boolean;
 };
 
 export type BookingMoneyFields = {
@@ -177,7 +179,9 @@ export async function setupBookingPayments(
       received,
       input.received_label?.trim() || "Deposit",
     );
-    await applyReceivedToMilestones(supabase, bookingId, received);
+    if (input.sync_milestones !== false) {
+      await applyReceivedToMilestones(supabase, bookingId, received);
+    }
   }
 }
 
