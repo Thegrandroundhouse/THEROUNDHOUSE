@@ -148,6 +148,20 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     fontFamily: "Times-Roman",
   },
+  signBlock: {
+    marginTop: 28,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: C.line,
+  },
+  signRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 20,
+  },
+  signCell: { width: "45%" },
+  signLabel: { fontSize: 8, color: C.muted, marginBottom: 24 },
+  signLine: { borderBottomWidth: 1, borderBottomColor: C.muted, height: 1 },
   appRow: {
     flexDirection: "row",
     borderBottomWidth: 1,
@@ -267,6 +281,34 @@ export function AgreementPdfDocument({
             {p}
           </Text>
         ))}
+
+        <View style={styles.signBlock} wrap={false}>
+          <Text style={{ fontSize: 9, fontFamily: "Times-Bold", marginBottom: 8 }}>Acceptance</Text>
+          <Text style={styles.bodyIntro}>
+            By signing below, the client confirms agreement to the terms above and the booking summary stated in this
+            document.
+          </Text>
+          <View style={styles.signRow}>
+            <View style={styles.signCell}>
+              <Text style={styles.signLabel}>Client signature</Text>
+              <View style={styles.signLine} />
+            </View>
+            <View style={styles.signCell}>
+              <Text style={styles.signLabel}>Date</Text>
+              <View style={styles.signLine} />
+            </View>
+          </View>
+          <View style={styles.signRow}>
+            <View style={styles.signCell}>
+              <Text style={styles.signLabel}>Print name</Text>
+              <View style={styles.signLine} />
+            </View>
+            <View style={styles.signCell}>
+              <Text style={styles.signLabel}>Venue representative</Text>
+              <View style={styles.signLine} />
+            </View>
+          </View>
+        </View>
 
         <Text
           style={styles.footer}

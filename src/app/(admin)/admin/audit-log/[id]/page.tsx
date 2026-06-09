@@ -22,6 +22,18 @@ type Entry = {
   created_at: string;
 };
 
+function formatAction(action: string): string {
+  return action.replace(/_/g, " ");
+}
+
+function actionPillClass(action: string): string {
+  if (action === "delete") return "admin-audit-pill admin-audit-pill--danger";
+  if (action === "create") return "admin-audit-pill admin-audit-pill--ok";
+  if (action === "pdf_generated") return "admin-audit-pill admin-audit-pill--muted";
+  if (action === "payment_recorded") return "admin-audit-pill admin-audit-pill--gold";
+  return "admin-audit-pill";
+}
+
 export default function AuditLogDetailPage() {
   const { id } = useParams() as { id: string };
   const [entry, setEntry] = useState<Entry | null>(null);
@@ -54,32 +66,50 @@ export default function AuditLogDetailPage() {
 
   if (forbidden) {
     return (
-      <div className="admin-bk">
-        <h1 className="admin-page-title">Audit log</h1>
-        <p className="admin-lead">Only administrators can view audit log entries.</p>
-        <Link href="/admin/audit-log" className="admin-btn admin-btn-primary">
-          Back to audit log
-        </Link>
+      <div className="admin-audit-v2">
+        <div className="admin-page-banner">
+          <header className="admin-bk-hero">
+            <div className="admin-bk-hero-text">
+              <h1 className="admin-page-title admin-bk-title">Audit log entry</h1>
+              <p className="admin-lead admin-bk-lead">Only administrators can view audit log entries.</p>
+            </div>
+          </header>
+        </div>
+        <div className="admin-audit-empty-state">
+          <Link href="/admin/audit-log" className="admin-btn admin-btn-primary">
+            Back to audit log
+          </Link>
+        </div>
       </div>
     );
   }
 
   if (notFound || (!loading && !entry)) {
     return (
-      <div className="admin-bk">
-        <h1 className="admin-page-title">Audit log entry</h1>
-        <p className="admin-lead">Entry not found. It may have been deleted or the ID is invalid.</p>
-        <Link href="/admin/audit-log" className="admin-btn admin-btn-primary">
-          Back to audit log
-        </Link>
+      <div className="admin-audit-v2">
+        <div className="admin-page-banner">
+          <header className="admin-bk-hero">
+            <div className="admin-bk-hero-text">
+              <h1 className="admin-page-title admin-bk-title">Entry not found</h1>
+              <p className="admin-lead admin-bk-lead">This record may have been removed or the link is invalid.</p>
+            </div>
+          </header>
+        </div>
+        <div className="admin-audit-empty-state">
+          <Link href="/admin/audit-log" className="admin-btn admin-btn-primary">
+            Back to audit log
+          </Link>
+        </div>
       </div>
     );
   }
 
   if (loading || !entry) {
     return (
-      <div className="admin-bk">
-        <div className="admin-bk-skeleton-line admin-bk-skeleton-line--lg" aria-busy />
+      <div className="admin-audit-v2">
+        <div className="admin-audit-loading" aria-busy="true">
+          <p className="admin-settings-loading">Loading entry…</p>
+        </div>
       </div>
     );
   }
@@ -89,48 +119,77 @@ export default function AuditLogDetailPage() {
   const whenFormatted = new Date(entry.created_at).toLocaleString("en-GB", { dateStyle: "long", timeStyle: "medium" });
 
   return (
-    <div className="admin-bkd admin-audit-detail-page">
+    <div className="admin-audit-v2 admin-audit-detail-page">
       <div className="admin-bkd-top-actions">
         <Link href="/admin/audit-log" className="admin-bkd-back">
           ← Back to audit log
         </Link>
       </div>
 
-      <header className="admin-audit-detail-hero">
-        <h1 className="admin-page-title admin-audit-detail-title">Entry details</h1>
-        <p className="admin-audit-detail-oneline">
-          <strong>{entry.actor_display_name}</strong> {entry.action.replace(/_/g, " ")} {entry.entity_type}
-          {entry.booking_code ? <> · {entry.booking_code}</> : null}
-          {" · "}
-          {whenFormatted}
-        </p>
-        <p className="admin-audit-detail-id">
-          Record ID: <code className="admin-bk-code">{entry.id}</code>
-        </p>
-      </header>
-
-      <div className="admin-audit-detail-glance">
-        <span><strong>Who:</strong> {entry.actor_display_name}{entry.actor_email ? ` (${entry.actor_email})` : ""}</span>
-        <span><strong>When:</strong> {whenFormatted}</span>
-        <span><strong>Action:</strong> {entry.action.replace(/_/g, " ")}</span>
-        <span><strong>Type:</strong> {entry.entity_type}</span>
+      <div className="admin-page-banner">
+        <header className="admin-bk-hero admin-audit-detail-banner">
+          <div className="admin-bk-hero-text">
+            <p className="admin-dash-kicker">Audit entry</p>
+            <h1 className="admin-page-title admin-bk-title">Entry details</h1>
+            <p className="admin-lead admin-bk-lead admin-audit-detail-oneline">
+              <strong>{entry.actor_display_name}</strong> {formatAction(entry.action)} · {entry.entity_type.replace(/_/g, " ")}
+              {entry.booking_code ? <> · <code className="admin-bk-code">{entry.booking_code}</code></> : null}
+            </p>
+            <p className="admin-audit-detail-id">
+              Recorded {whenFormatted} · ID <code className="admin-bk-code">{entry.id.slice(0, 8)}…</code>
+            </p>
+          </div>
+          <div className="admin-bk-hero-actions">
+            {entry.booking_id ? (
+              <>
+                <Link href={`/admin/bookings/${entry.booking_id}`} className="admin-btn admin-btn-primary">
+                  View booking
+                </Link>
+                <Link href={`/admin/payments/booking/${entry.booking_id}`} className="admin-btn admin-btn-ghost">
+                  Payments
+                </Link>
+              </>
+            ) : null}
+          </div>
+        </header>
       </div>
 
-      <section className="admin-audit-detail-section">
+      <div className="admin-audit-detail-glance">
+        <span>
+          <strong>Who</strong> {entry.actor_display_name}
+          {entry.actor_email ? ` (${entry.actor_email})` : ""}
+        </span>
+        <span>
+          <strong>When</strong> {whenFormatted}
+        </span>
+        <span>
+          <strong>Action</strong> <span className={actionPillClass(entry.action)}>{formatAction(entry.action)}</span>
+        </span>
+        <span>
+          <strong>Type</strong> {entry.entity_type.replace(/_/g, " ")}
+        </span>
+      </div>
+
+      <section className="admin-card admin-audit-detail-section">
         <h2 className="admin-audit-detail-heading">What happened</h2>
         <p className="admin-audit-detail-summary">{entry.summary}</p>
         <dl className="admin-audit-detail-dl">
           <dt>Action</dt>
-          <dd><span className="admin-audit-detail-pill">{entry.action.replace(/_/g, " ")}</span></dd>
+          <dd>
+            <span className={actionPillClass(entry.action)}>{formatAction(entry.action)}</span>
+          </dd>
           <dt>Item type</dt>
-          <dd>{entry.entity_type}</dd>
+          <dd>{entry.entity_type.replace(/_/g, " ")}</dd>
           {entry.entity_id ? (
             <>
               <dt>Item ID</dt>
               <dd>
                 <code className="admin-bk-code">{entry.entity_id}</code>
                 {entry.entity_type === "enquiry" ? (
-                  <> · <Link href={`/admin/enquiries/${entry.entity_id}`}>View enquiry</Link></>
+                  <>
+                    {" "}
+                    · <Link href={`/admin/enquiries/${entry.entity_id}`}>View enquiry</Link>
+                  </>
                 ) : null}
               </dd>
             </>
@@ -139,10 +198,8 @@ export default function AuditLogDetailPage() {
             <>
               <dt>Booking</dt>
               <dd>
-                {entry.booking_code ? <code className="admin-bk-code">{entry.booking_code}</code> : null}
-                {" "}
-                <Link href={`/admin/bookings/${entry.booking_id}`}>View booking</Link>
-                {" · "}
+                {entry.booking_code ? <code className="admin-bk-code">{entry.booking_code}</code> : null}{" "}
+                <Link href={`/admin/bookings/${entry.booking_id}`}>View booking</Link> ·{" "}
                 <Link href={`/admin/payments/booking/${entry.booking_id}`}>Payments</Link>
               </dd>
             </>
@@ -150,79 +207,65 @@ export default function AuditLogDetailPage() {
         </dl>
       </section>
 
-      {hasPayload ? (
-        <section className="admin-audit-detail-section">
-          <h2 className="admin-audit-detail-heading">What changed (before & after)</h2>
-          <p className="admin-audit-detail-muted" style={{ marginBottom: "0.75rem" }}>Raw data: the state before and after the action. Useful for support or debugging.</p>
-          {entry.payload_before != null ? (
-            <div className="admin-audit-detail-json-block">
-              <h3 className="admin-audit-detail-sub">Before</h3>
-              <pre className="admin-audit-detail-pre">{JSON.stringify(entry.payload_before, null, 2)}</pre>
-            </div>
-          ) : null}
-          {entry.payload_after != null ? (
-            <div className="admin-audit-detail-json-block">
-              <h3 className="admin-audit-detail-sub">After</h3>
-              <pre className="admin-audit-detail-pre">{JSON.stringify(entry.payload_after, null, 2)}</pre>
-            </div>
-          ) : null}
-        </section>
-      ) : (
-        <section className="admin-audit-detail-section">
-          <h2 className="admin-audit-detail-heading">What changed (before & after)</h2>
-          <p className="admin-audit-detail-muted" style={{ margin: 0 }}>No before/after data was recorded for this entry.</p>
-        </section>
-      )}
+      <section className="admin-card admin-audit-detail-section">
+        <h2 className="admin-audit-detail-heading">What changed (before &amp; after)</h2>
+        {hasPayload ? (
+          <>
+            <p className="admin-audit-detail-muted">Raw data captured at the time of the action — useful for support or debugging.</p>
+            {entry.payload_before != null ? (
+              <div className="admin-audit-detail-json-block">
+                <h3 className="admin-audit-detail-sub">Before</h3>
+                <pre className="admin-audit-detail-pre">{JSON.stringify(entry.payload_before, null, 2)}</pre>
+              </div>
+            ) : null}
+            {entry.payload_after != null ? (
+              <div className="admin-audit-detail-json-block">
+                <h3 className="admin-audit-detail-sub">After</h3>
+                <pre className="admin-audit-detail-pre">{JSON.stringify(entry.payload_after, null, 2)}</pre>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <p className="admin-audit-detail-muted">No before/after data was recorded for this entry.</p>
+        )}
+      </section>
 
       {hasMetadata ? (
-        <section className="admin-audit-detail-section">
+        <section className="admin-card admin-audit-detail-section">
           <h2 className="admin-audit-detail-heading">Extra data</h2>
-          <p className="admin-audit-detail-muted" style={{ marginBottom: "0.75rem" }}>Additional technical details (e.g. export options, file names).</p>
+          <p className="admin-audit-detail-muted">Additional technical details (e.g. export options, file names).</p>
           <pre className="admin-audit-detail-pre">{JSON.stringify(entry.metadata, null, 2)}</pre>
         </section>
-      ) : (
-        <section className="admin-audit-detail-section">
-          <h2 className="admin-audit-detail-heading">Extra data</h2>
-          <p className="admin-audit-detail-muted" style={{ margin: 0 }}>No extra data recorded.</p>
-        </section>
-      )}
+      ) : null}
 
-      <section className="admin-audit-detail-section admin-audit-detail-technical">
+      <section className="admin-card admin-audit-detail-section admin-audit-detail-technical">
         <h2 className="admin-audit-detail-heading">All fields</h2>
-        <p className="admin-audit-detail-muted" style={{ marginBottom: "0.75rem" }}>Every field for this entry — for support or copying IDs.</p>
+        <p className="admin-audit-detail-muted">Complete record for support or copying IDs.</p>
         <dl className="admin-audit-detail-dl">
           <dt>Record ID</dt>
-          <dd><code className="admin-bk-code">{entry.id}</code></dd>
+          <dd>
+            <code className="admin-bk-code">{entry.id}</code>
+          </dd>
           <dt>Who (user ID)</dt>
-          <dd>{entry.actor_user_id ? <code className="admin-bk-code">{entry.actor_user_id}</code> : <span className="admin-audit-detail-muted">—</span>}</dd>
+          <dd>
+            {entry.actor_user_id ? <code className="admin-bk-code">{entry.actor_user_id}</code> : <span className="admin-audit-detail-muted">—</span>}
+          </dd>
           <dt>Email</dt>
           <dd>{entry.actor_email ?? <span className="admin-audit-detail-muted">—</span>}</dd>
           <dt>Display name</dt>
           <dd>{entry.actor_display_name || <span className="admin-audit-detail-muted">—</span>}</dd>
-          <dt>Action</dt>
-          <dd>{entry.action.replace(/_/g, " ")}</dd>
-          <dt>Item type</dt>
-          <dd>{entry.entity_type}</dd>
-          <dt>Item ID</dt>
-          <dd>{entry.entity_id ? <code className="admin-bk-code">{entry.entity_id}</code> : <span className="admin-audit-detail-muted">—</span>}</dd>
-          <dt>Booking ID</dt>
-          <dd>{entry.booking_id ? <code className="admin-bk-code">{entry.booking_id}</code> : <span className="admin-audit-detail-muted">—</span>}</dd>
           <dt>Summary</dt>
           <dd>{entry.summary || <span className="admin-audit-detail-muted">—</span>}</dd>
           <dt>Recorded at</dt>
-          <dd>{whenFormatted} <span className="admin-audit-detail-muted">({entry.created_at})</span></dd>
-          <dt>Data before</dt>
-          <dd>{entry.payload_before != null ? "Yes (see above)" : <span className="admin-audit-detail-muted">—</span>}</dd>
-          <dt>Data after</dt>
-          <dd>{entry.payload_after != null ? "Yes (see above)" : <span className="admin-audit-detail-muted">—</span>}</dd>
-          <dt>Extra data</dt>
-          <dd>{hasMetadata ? "Yes (see above)" : <span className="admin-audit-detail-muted">—</span>}</dd>
+          <dd>
+            {whenFormatted} <span className="admin-audit-detail-muted">({entry.created_at})</span>
+          </dd>
         </dl>
       </section>
 
       <div className="admin-audit-detail-footer">
         <Link href="/admin/audit-log" className="admin-btn admin-btn-ghost">
-          Back to audit log
+          ← Back to audit log
         </Link>
       </div>
     </div>

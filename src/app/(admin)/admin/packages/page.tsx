@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { adminFetch } from "@/lib/admin-api-client";
+import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { AdminStatsCards } from "@/components/admin/AdminStatsCards";
 
 export type PkgLine = { label: string; description: string; amount_cents: number };
@@ -28,14 +28,23 @@ export default function PackagesPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [limit, setLimit] = useState(25);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = () => {
+    setLoadError(null);
     adminFetch(`/api/admin/packages?page=${page}&limit=${limit}`)
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(await parseAdminError(r, "Couldn’t load packages"));
+        return r.json();
+      })
       .then((d) => {
         setList(Array.isArray(d.rows) ? d.rows : []);
         setTotalPages(d.totalPages ?? 1);
         setTotal(d.total ?? 0);
+      })
+      .catch((err) => {
+        setList([]);
+        setLoadError(err instanceof Error ? err.message : "Couldn’t load packages");
       });
   };
   useEffect(() => {
@@ -65,6 +74,15 @@ export default function PackagesPage() {
           </div>
         </header>
       </div>
+
+      {loadError ? (
+        <div className="admin-pay-banner" style={{ background: "#fee2e2", borderColor: "#ef4444" }} role="alert">
+          {loadError}
+          <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" style={{ marginLeft: "0.75rem" }} onClick={() => load()}>
+            Retry
+          </button>
+        </div>
+      ) : null}
 
       <div className="admin-stats-unified-wrap">
         <AdminStatsCards

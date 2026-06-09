@@ -12,12 +12,14 @@ export async function GET(request: Request) {
       .select("*")
       .order("event_date", { ascending: true });
     if (error) {
-      if (error.code === "42P01" || error.message?.includes("venue_day")) return NextResponse.json([]);
+      if (error.code === "42P01" || error.message?.includes("venue_day")) {
+        return NextResponse.json({ rows: [], needsMigration: true });
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     return NextResponse.json(data ?? []);
   } catch {
-    return NextResponse.json([]);
+    return NextResponse.json({ rows: [], needsMigration: true });
   }
 }
 

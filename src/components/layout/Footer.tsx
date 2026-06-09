@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { siteConfig } from "@/data/site";
 
-const ADDRESS = "Advent Way, London N18 3AF";
-const PHONE = "020 3700 2727";
+const PHONE = siteConfig.phone;
 
 const EXPLORE = [
   { label: "Weddings", href: "/weddings" },
@@ -58,7 +58,7 @@ export default function Footer() {
       <div className="container footer-grid">
         <div className="footer-brand">
           <div className="section-label">The Grand Roundhouse</div>
-          <p className="footer-address">{ADDRESS}</p>
+          <p className="footer-address">{siteConfig.address}</p>
           <a href={`tel:${PHONE.replace(/\s/g, "")}`} className="footer-phone">
             {PHONE}
           </a>

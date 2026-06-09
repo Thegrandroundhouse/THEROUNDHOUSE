@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { getAdminClient } from "@/lib/admin-api";
+import { ensureBookingPaymentMilestones } from "@/lib/booking-payment-setup";
 
 export async function GET(request: Request, { params }: { params: Promise<{ bookingId: string }> }) {
   if (!(await getAuthUserFromRequest(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -10,6 +11,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ book
 
   const { data: booking, error: bErr } = await supabase.from("bookings").select("*").eq("id", bookingId).maybeSingle();
   if (bErr || !booking) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+
+  try {
+    await ensureBookingPaymentMilestones(supabase, bookingId);
+  } catch {
+    /* non-fatal — still return whatever exists */
+  }
 
   const [{ data: milestones }, { data: records }] = await Promise.all([
     supabase.from("booking_payment_milestones").select("*").eq("booking_id", bookingId).order("sort_order"),

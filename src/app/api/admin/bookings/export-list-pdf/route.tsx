@@ -5,6 +5,7 @@ import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { getAdminClient } from "@/lib/admin-api";
 import { BookingsListPdfDocument, type ListExportColumns } from "@/lib/bookings-list-export-pdf";
 import { BOOKINGS_EXPORT_COLUMNS_DEFAULT } from "@/lib/bookings-export-columns";
+import { ADMIN_VENUE_FALLBACK } from "@/lib/venue-constants";
 
 export async function POST(request: Request) {
   const user = await getAuthUserFromRequest(request);
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
   const { data: rows, error } = await qb.limit(500);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const venueName = process.env.NEXT_PUBLIC_SITE_NAME || "The Grand Roundhouse";
+  const venueName = process.env.NEXT_PUBLIC_SITE_NAME || ADMIN_VENUE_FALLBACK;
   const doc = (
     <BookingsListPdfDocument
       venueName={venueName}

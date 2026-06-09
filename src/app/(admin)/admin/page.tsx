@@ -150,7 +150,15 @@ export default function AdminDashboardPage() {
             {me?.displayName ? `Welcome back, ${me.displayName}` : "Dashboard"}
           </h1>
           <p className="admin-dash-sub">
-            Overview, upcoming bookings and reminders. Use the menu to jump to any section.
+            Overview, upcoming bookings and reminders. Follow the pipeline in{" "}
+            <Link href="/admin/operations" className="admin-link">
+              Operations hub
+            </Link>
+            {" "}or download the{" "}
+            <Link href="/admin/settings?tab=guide" className="admin-link">
+              CRM user guide (PDF)
+            </Link>
+            .
           </p>
         </header>
       </div>

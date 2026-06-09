@@ -3,32 +3,20 @@ import { NextResponse } from "next/server";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { getAdminClient } from "@/lib/admin-api";
-import { AgreementPdfDocument } from "@/lib/agreement-pdf-document";
-import { getBookingSlotsConfig } from "@/lib/booking-slots";
-import { loadAgreementMergeVars } from "@/lib/agreement-merge-load";
-import type { InvoiceBusinessPayload } from "@/app/api/admin/settings/invoice-business/route";
+import { buildBookingAgreementPdfDocument } from "@/lib/render-booking-agreement-pdf";
+import { parseInvoiceBusinessValue } from "@/lib/invoice-business";
+import type { InvoiceBusinessPayload } from "@/lib/invoice-business";
 
 function loadBusiness(v: unknown): InvoiceBusinessPayload | null {
-  if (!v || typeof v !== "object") return null;
-  const o = v as Record<string, string>;
-  return {
-    venueName: String(o.venueName || ""),
-    venueTagline: String(o.venueTagline || ""),
-    venueAddress: String(o.venueAddress || ""),
-    venuePhone: String(o.venuePhone || ""),
-    venueEmail: String(o.venueEmail || ""),
-    bankName: String(o.bankName || ""),
-    sortCode: String(o.sortCode || ""),
-    accountNumber: String(o.accountNumber || ""),
-    accountName: String(o.accountName || ""),
-    paymentReference: String(o.paymentReference || ""),
-  };
+  if (!v) return null;
+  return parseInvoiceBusinessValue(v);
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string; agreementId: string }> }) {
-  const user = await getAuthUserFromRequest(_request);
+export async function GET(request: Request, { params }: { params: Promise<{ id: string; agreementId: string }> }) {
+  const user = await getAuthUserFromRequest(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id: bookingId, agreementId } = await params;
+  const inline = new URL(request.url).searchParams.get("inline") === "1";
   const supabase = getAdminClient();
   if (!supabase) return NextResponse.json({ error: "Not configured" }, { status: 500 });
 
@@ -40,66 +28,32 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   if (!row || !booking) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const templateId = row.template_id as string | null;
+  const { data: templateRow } = templateId
+    ? await supabase.from("agreement_templates").select("slug, body").eq("id", templateId).maybeSingle()
+    : { data: null };
+
   const business = loadBusiness(bizRow?.value);
-  const config = await getBookingSlotsConfig(supabase);
-  const slotKey = booking.event_slot_key as string | null;
-  const event_slot_label =
-    slotKey && String(slotKey).trim()
-      ? (() => {
-          const def = config.slots.find((s) => s.key === slotKey);
-          return def ? `${def.label}${def.timeLabel ? ` · ${def.timeLabel}` : ""}` : slotKey;
-        })()
-      : "Full venue (whole day)";
 
-  const totalGbp =
-    booking.total_cents != null && Number.isFinite(booking.total_cents)
-      ? `£${(booking.total_cents / 100).toFixed(2)}`
-      : "—";
-  const eventDate =
-    booking.event_date && /^\d{4}-\d{2}-\d{2}$/.test(booking.event_date)
-      ? new Date(booking.event_date + "T12:00:00").toLocaleDateString("en-GB", {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-        })
-      : String(booking.event_date || "—");
-
-  const generatedAt = new Date().toLocaleString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  const { appendix } = await loadAgreementMergeVars(
-    supabase,
-    booking as Record<string, unknown>,
-    business ? { venueName: business.venueName } : null,
-    event_slot_label,
-  );
-
-  const doc = (
-    <AgreementPdfDocument
-      venueName={business?.venueName || "Venue"}
-      venueTagline={business?.venueTagline || ""}
-      agreementTitle={String(row.title || "Hire agreement")}
-      clientName={String(booking.client_name || booking.client_email || "—")}
-      clientEmail={String(booking.client_email || "")}
-      eventDate={eventDate}
-      eventSlotLabel={event_slot_label}
-      bookingCode={String(booking.booking_code || bookingId.slice(0, 8).toUpperCase())}
-      totalGbp={totalGbp}
-      bodyText={String(row.rendered_body || "")}
-      generatedAt={generatedAt}
-      appendix={appendix}
-    />
-  );
+  let doc: React.ReactElement;
+  try {
+    doc = await buildBookingAgreementPdfDocument(supabase, {
+      booking: booking as Record<string, unknown>,
+      business,
+      templateSlug: templateRow?.slug as string | undefined,
+      templateBody: templateRow?.body ? String(templateRow.body) : null,
+      agreementTitle: String(row.title || "Hire agreement"),
+      renderedBody: String(row.rendered_body || ""),
+      customValues: row.custom_values,
+    });
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json({ error: "Could not build PDF" }, { status: 500 });
+  }
 
   let buffer: Buffer;
   try {
-    buffer = await renderToBuffer(doc);
+    buffer = await renderToBuffer(doc as React.ReactElement<import("@react-pdf/renderer").DocumentProps>);
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: "PDF render failed" }, { status: 500 });
@@ -113,7 +67,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${safeName}-${booking.booking_code || bookingId.slice(0, 8)}.pdf"`,
+      "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${safeName}-${booking.booking_code || bookingId.slice(0, 8)}.pdf"`,
     },
   });
 }

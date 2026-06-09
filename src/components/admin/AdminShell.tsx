@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
+import { ADMIN_APP_NAME, ADMIN_APP_TAGLINE } from "@/lib/venue-constants";
 import SignOutButton from "@/components/auth/SignOutButton";
 import { adminFetch } from "@/lib/admin-api-client";
 import { AdminGlobalSearch } from "@/components/admin/AdminGlobalSearch";
@@ -124,16 +125,17 @@ function NavGroups({
     title: "Overview",
     items: [
       { label: "Dashboard", href: "/admin", icon: <IconDash /> },
+      { label: "Operations hub", href: "/admin/operations", icon: <IconGrid /> },
       { label: "Reminders", href: "/admin/reminders", icon: <IconBell /> },
     ],
   },
   {
-    title: "Events & sales",
+    title: "Sales pipeline",
     items: [
+      { label: "Enquiries", href: "/admin/enquiries", icon: <IconMail /> },
       { label: "Calendar", href: "/admin/calendar", icon: <IconCal /> },
       { label: "Bookings", href: "/admin/bookings", icon: <IconBook /> },
-      { label: "Upcoming bookings", href: "/admin/upcoming", icon: <IconCal /> },
-      { label: "Enquiries", href: "/admin/enquiries", icon: <IconMail /> },
+      { label: "Upcoming", href: "/admin/upcoming", icon: <IconCal /> },
     ],
   },
   {
@@ -147,17 +149,17 @@ function NavGroups({
     ],
   },
   {
-    title: "Suppliers",
+    title: "Catalogue",
     items: [
-      { label: "Vendors", href: "/admin/vendors", icon: <IconVendor /> },
       { label: "Packages", href: "/admin/packages", icon: <IconPkg /> },
+      { label: "Vendors", href: "/admin/vendors", icon: <IconVendor /> },
     ],
   },
   {
-    title: "Team",
+    title: "Team & settings",
     items: [
-      ...(showAudit ? [{ label: "Audit log", href: "/admin/audit-log", icon: <IconAudit /> }] as NavItem[] : []),
       { label: "Staff", href: "/admin/staff", icon: <IconStaff /> },
+      ...(showAudit ? [{ label: "Audit log", href: "/admin/audit-log", icon: <IconAudit /> }] as NavItem[] : []),
       { label: "Settings", href: "/admin/settings", icon: <IconGear /> },
     ],
   },
@@ -278,11 +280,13 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             >
               {navRailCollapsed ? "»" : "«"}
             </button>
-            <Link href="/admin" className="admin-sidebar-logo-link">
-              <span className="admin-sidebar-logo-mark">R</span>
+            <Link href="/admin" className="admin-sidebar-logo-link" title={`${ADMIN_APP_NAME} — ${ADMIN_APP_TAGLINE}`}>
+              <span className="admin-sidebar-logo-mark" aria-hidden>
+                R
+              </span>
               <div>
-                <span className="admin-sidebar-logo-title">The Grand Roundhouse</span>
-                <span className="admin-sidebar-logo-sub">Venue control centre</span>
+                <span className="admin-sidebar-logo-title">{ADMIN_APP_NAME}</span>
+                <span className="admin-sidebar-logo-sub">{ADMIN_APP_TAGLINE}</span>
               </div>
             </Link>
           </div>
@@ -303,8 +307,13 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         <aside className={`admin-sidebar-drawer ${open ? "admin-sidebar-drawer--open" : ""}`}>
           <div className="admin-drawer-top">
             <div className="admin-drawer-brand">
-              <span className="admin-sidebar-logo-mark">R</span>
-              <span className="admin-drawer-brand-text">Menu</span>
+              <span className="admin-sidebar-logo-mark" aria-hidden>
+                R
+              </span>
+              <div>
+                <span className="admin-drawer-brand-text">{ADMIN_APP_NAME}</span>
+                <span className="admin-drawer-brand-sub">{ADMIN_APP_TAGLINE}</span>
+              </div>
             </div>
             <button type="button" className="admin-drawer-x" onClick={() => setOpen(false)} aria-label="Close menu">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

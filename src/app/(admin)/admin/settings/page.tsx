@@ -2,18 +2,95 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { adminFetch } from "@/lib/admin-api-client";
+import { useRouter, useSearchParams } from "next/navigation";
+import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import type { InvoiceBusinessPayload } from "@/app/api/admin/settings/invoice-business/route";
 import { DEFAULT_BOOKING_SLOTS } from "@/lib/booking-slots";
+import { VENUE_ADDRESS } from "@/lib/venue-constants";
+import { HireContractSettingsTab } from "@/components/admin/HireContractSettingsTab";
+import type { HireContractSettingsPayload } from "@/lib/hire-contract-settings";
+import { HIRE_CONTRACT_SETTINGS_DEFAULTS } from "@/lib/hire-contract-settings";
 
-type SettingsTab = "logo" | "business" | "slots";
+type SettingsTab = "logo" | "business" | "contract" | "slots" | "guide";
 
 type SlotRow = { key: string; label: string; timeLabel: string };
 
+const TAB_META: Record<
+  SettingsTab,
+  { label: string; short: string; kicker: string; feeds: string }
+> = {
+  logo: {
+    label: "Invoice logo",
+    short: "Logo",
+    kicker: "Branding",
+    feeds: "Invoice PDFs when you choose “Use preferred logo”.",
+  },
+  business: {
+    label: "Business & bank",
+    short: "Business",
+    kicker: "Venue details",
+    feeds: "Contracts, invoices, booking exports, and T&C PDF headers.",
+  },
+  contract: {
+    label: "Hire contract",
+    short: "Contract",
+    kicker: "PDF pack",
+    feeds: "Default hire contract pages, inclusions, options list, and intro text — overridable per booking.",
+  },
+  slots: {
+    label: "Booking slots",
+    short: "Slots",
+    kicker: "Scheduling",
+    feeds: "Contact form, new booking, calendar capacity, and package slot rules.",
+  },
+  guide: {
+    label: "User guide (PDF)",
+    short: "Guide",
+    kicker: "Training",
+    feeds: "Downloadable CRM handbook for your team.",
+  },
+};
+
+const TABS: SettingsTab[] = ["logo", "business", "contract", "slots", "guide"];
+
+function SettingsInput({
+  id,
+  label,
+  type = "text",
+  value,
+  onChange,
+  placeholder,
+  full,
+}: {
+  id?: string;
+  label: string;
+  type?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  full?: boolean;
+}) {
+  return (
+    <div className={`admin-settings-v2-field ${full ? "admin-settings-v2-field--full" : ""}`}>
+      <label htmlFor={id}>{label}</label>
+      <input
+        id={id}
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="admin-settings-v2-input"
+      />
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { alert } = useAdminDialog();
-  const [tab, setTab] = useState<SettingsTab>("logo");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [tab, setTabState] = useState<SettingsTab>("logo");
   const [preferredLogoUrl, setPreferredLogoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -28,8 +105,18 @@ export default function SettingsPage() {
     slots: SlotRow[];
   } | null>(null);
   const [slotsSaving, setSlotsSaving] = useState(false);
+  const [guideDownloading, setGuideDownloading] = useState(false);
+  const [hireContract, setHireContract] = useState<HireContractSettingsPayload>(HIRE_CONTRACT_SETTINGS_DEFAULTS);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
+  const setTab = useCallback(
+    (next: SettingsTab) => {
+      setTabState(next);
+      router.replace(`/admin/settings?tab=${next}`, { scroll: false });
+    },
+    [router],
+  );
 
   const loadSettings = useCallback(() => {
     setLoading(true);
@@ -65,18 +152,30 @@ export default function SettingsPage() {
               : null,
           ),
         ),
-    ]).then((results) => {
-      const biz = results[1];
-      const slots = results[2];
-      if (biz.status === "rejected" && slots.status === "rejected") {
-        setLoadError("Couldn’t load settings. Check your connection and sign-in, then try again.");
-      }
-    }).finally(() => setLoading(false));
+      adminFetch("/api/admin/settings/hire-contract")
+        .then((r) => (r.ok ? r.json() : HIRE_CONTRACT_SETTINGS_DEFAULTS))
+        .then((d) => setHireContract(d)),
+    ])
+      .then((results) => {
+        const biz = results[1];
+        const slots = results[2];
+        if (biz.status === "rejected" && slots.status === "rejected") {
+          setLoadError("Couldn’t load settings. Check your connection and sign-in, then try again.");
+        }
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
     loadSettings();
   }, [reloadKey, loadSettings]);
+
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t === "guide" || t === "logo" || t === "business" || t === "contract" || t === "slots") {
+      setTabState(t);
+    }
+  }, [searchParams]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -95,7 +194,7 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: d.url }),
       });
-      if (!put.ok) throw new Error("Failed to save as preferred");
+      if (!put.ok) throw new Error(await parseAdminError(put, "Couldn’t save as preferred logo"));
       await alert("Preferred logo updated.");
     } catch (err) {
       await alert(err instanceof Error ? err.message : "Upload failed");
@@ -114,7 +213,7 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: null }),
       });
-      if (!r.ok) throw new Error("Failed to clear");
+      if (!r.ok) throw new Error(await parseAdminError(r, "Couldn’t clear logo"));
       setPreferredLogoUrl(null);
       await alert("Preferred logo cleared.");
     } catch (err) {
@@ -134,7 +233,7 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(business),
       });
-      if (!r.ok) throw new Error("Failed to save");
+      if (!r.ok) throw new Error(await parseAdminError(r, "Couldn’t save business details"));
       await alert("Business & bank details saved.");
     } catch (err) {
       await alert(err instanceof Error ? err.message : "Failed to save");
@@ -143,11 +242,28 @@ export default function SettingsPage() {
     }
   };
 
-  const tabs: { id: SettingsTab; label: string; short: string }[] = [
-    { id: "logo", label: "Invoice logo", short: "Logo" },
-    { id: "business", label: "Business & bank", short: "Business" },
-    { id: "slots", label: "Booking slots", short: "Slots" },
-  ];
+  const downloadCrmGuide = async () => {
+    setGuideDownloading(true);
+    try {
+      const r = await adminFetch("/api/admin/settings/crm-guide/pdf");
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(typeof j.error === "string" ? j.error : "Download failed");
+      }
+      const blob = await r.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "Roundhouse-Banqueting-CRM-User-Guide.pdf";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      await alert(err instanceof Error ? err.message : "Could not download guide");
+    } finally {
+      setGuideDownloading(false);
+    }
+  };
+
+  const activeMeta = TAB_META[tab];
 
   return (
     <div className="admin-settings admin-settings-v2">
@@ -156,10 +272,18 @@ export default function SettingsPage() {
           <div className="admin-bk-hero-text">
             <p className="admin-dash-kicker">Admin</p>
             <h1 className="admin-page-title admin-bk-title">Settings</h1>
-            <p className="admin-lead admin-bk-lead">Logo, business &amp; bank details, and booking time slots for the site and admin.</p>
+            <p className="admin-lead admin-bk-lead">
+              Logo, business &amp; bank, hire contract PDF, booking slots, and the CRM user guide — everything that feeds
+              your PDFs and public forms.
+            </p>
           </div>
           <div className="admin-bk-hero-actions admin-settings-v2-hero-actions">
-            <button type="button" className="admin-btn admin-btn-ghost" disabled={loading} onClick={() => setReloadKey((k) => k + 1)}>
+            <button
+              type="button"
+              className="admin-btn admin-btn-ghost"
+              disabled={loading}
+              onClick={() => setReloadKey((k) => k + 1)}
+            >
               {loading ? "Loading…" : "Refresh"}
             </button>
             <Link href="/admin/bookings" className="admin-btn admin-btn-ghost">
@@ -168,22 +292,29 @@ export default function SettingsPage() {
             <Link href="/admin/calendar" className="admin-btn admin-btn-ghost">
               Calendar
             </Link>
-            <nav className="admin-settings-v2-tabs admin-settings-v2-tabs--banner" aria-label="Settings sections">
-              {tabs.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  className={`admin-settings-v2-tab ${tab === t.id ? "admin-settings-v2-tab--active" : ""}`}
-                  onClick={() => setTab(t.id)}
-                >
-                  <span className="admin-settings-v2-tab-full">{t.label}</span>
-                  <span className="admin-settings-v2-tab-short">{t.short}</span>
-                </button>
-              ))}
-            </nav>
           </div>
         </header>
       </div>
+
+      <nav className="admin-settings-v2-tabbar" aria-label="Settings sections">
+        {TABS.map((id) => (
+          <button
+            key={id}
+            type="button"
+            className={`admin-settings-v2-tab ${tab === id ? "admin-settings-v2-tab--active" : ""}`}
+            onClick={() => setTab(id)}
+            aria-current={tab === id ? "page" : undefined}
+          >
+            <span className="admin-settings-v2-tab-full">{TAB_META[id].label}</span>
+            <span className="admin-settings-v2-tab-short">{TAB_META[id].short}</span>
+          </button>
+        ))}
+      </nav>
+
+      <p className="admin-settings-v2-feeds">
+        <span className="admin-settings-v2-feeds-label">{activeMeta.kicker}</span>
+        {activeMeta.feeds}
+      </p>
 
       <div className="admin-settings-v2-panel">
         {loadError ? (
@@ -194,118 +325,184 @@ export default function SettingsPage() {
             </button>
           </div>
         ) : loading ? (
-          <p className="admin-settings-loading">Loading settings…</p>
+          <div className="admin-settings-v2-skeleton" aria-busy="true">
+            <p className="admin-settings-loading">Loading settings…</p>
+          </div>
         ) : (
           <>
             {tab === "logo" && (
-              <section className="admin-card admin-settings-v2-card">
-                <h2 className="admin-card-heading">Invoice logo</h2>
-                <p className="admin-settings-desc">PNG or JPG for invoice PDFs when you use “Use preferred logo”.</p>
-                <div className="admin-settings-logo-wrap admin-settings-v2-logo">
-                  {preferredLogoUrl && (
-                    <div className="admin-settings-logo-preview">
-                      <img src={preferredLogoUrl} alt="Preferred logo" />
-                    </div>
-                  )}
-                  <div className="admin-settings-logo-actions">
-                    <label className="admin-btn admin-btn-primary">
-                      {uploading ? "Uploading…" : "Upload"}
-                      <input type="file" accept="image/png,image/jpeg,image/jpg" disabled={uploading} onChange={handleUpload} className="admin-settings-file-input" />
-                    </label>
-                    {preferredLogoUrl && (
-                      <button type="button" className="admin-btn admin-btn-ghost" disabled={saving} onClick={clearPreferred}>
-                        Remove
-                      </button>
+              <section className="admin-card admin-settings-v2-card admin-settings-v2-logo-section">
+                <header className="admin-settings-v2-section-head">
+                  <p className="admin-settings-v2-kicker">{TAB_META.logo.kicker}</p>
+                  <h2 className="admin-card-heading">Invoice logo</h2>
+                  <p className="admin-settings-desc">
+                    PNG or JPG — shown on invoice PDFs when you tick <strong>Use preferred logo</strong> on a new invoice.
+                  </p>
+                </header>
+
+                <div className="admin-settings-v2-logo-grid">
+                  <div className="admin-settings-v2-logo-preview-card">
+                    {preferredLogoUrl ? (
+                      <img src={preferredLogoUrl} alt="Preferred invoice logo" />
+                    ) : (
+                      <div className="admin-settings-v2-logo-empty">
+                        <span aria-hidden>◇</span>
+                        <p>No logo saved yet</p>
+                      </div>
                     )}
+                  </div>
+
+                  <div className="admin-settings-v2-logo-side">
+                    <ul className="admin-settings-v2-usage-list">
+                      <li>Invoices → “Use preferred logo” on create</li>
+                      <li>Stored once — reused across all staff</li>
+                      <li>Recommended: transparent PNG, max height ~120px</li>
+                    </ul>
+                    <div className="admin-settings-logo-actions">
+                      <label className="admin-btn admin-btn-primary">
+                        {uploading ? "Uploading…" : preferredLogoUrl ? "Replace logo" : "Upload logo"}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg"
+                          disabled={uploading}
+                          onChange={handleUpload}
+                          className="admin-settings-file-input"
+                        />
+                      </label>
+                      {preferredLogoUrl ? (
+                        <button type="button" className="admin-btn admin-btn-ghost" disabled={saving} onClick={clearPreferred}>
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </section>
             )}
 
-            {tab === "business" && !business && <p className="admin-settings-desc">Could not load business details.</p>}
+            {tab === "business" && !business && (
+              <p className="admin-settings-desc">Could not load business details.</p>
+            )}
             {tab === "business" && business && (
               <section className="admin-card admin-settings-v2-card">
-                <h2 className="admin-card-heading">Business & payment</h2>
-                <p className="admin-settings-desc">Venue details on PDFs; bank block when filled.</p>
-                <form onSubmit={saveBusiness} className="admin-settings-form admin-settings-v2-compact">
-                  <div className="admin-settings-v2-two-col">
-                    <div className="admin-settings-field admin-settings-field--full">
-                      <label>Venue name</label>
-                      <input
-                        value={business.venueName}
-                        onChange={(e) => setBusiness((b) => (b ? { ...b, venueName: e.target.value } : b))}
-                        className="admin-table-inline-input"
-                      />
-                    </div>
-                    <div className="admin-settings-field admin-settings-field--full">
-                      <label>Tagline</label>
-                      <input
-                        value={business.venueTagline}
-                        onChange={(e) => setBusiness((b) => (b ? { ...b, venueTagline: e.target.value } : b))}
-                        className="admin-table-inline-input"
-                      />
-                    </div>
-                    <div className="admin-settings-field admin-settings-field--full">
-                      <label>Address</label>
-                      <input
-                        value={business.venueAddress}
-                        onChange={(e) => setBusiness((b) => (b ? { ...b, venueAddress: e.target.value } : b))}
-                        className="admin-table-inline-input"
-                      />
-                    </div>
-                    <div className="admin-settings-field">
-                      <label>Phone</label>
-                      <input type="tel" value={business.venuePhone} onChange={(e) => setBusiness((b) => (b ? { ...b, venuePhone: e.target.value } : b))} className="admin-table-inline-input" />
-                    </div>
-                    <div className="admin-settings-field">
-                      <label>Email</label>
-                      <input type="email" value={business.venueEmail} onChange={(e) => setBusiness((b) => (b ? { ...b, venueEmail: e.target.value } : b))} className="admin-table-inline-input" />
-                    </div>
+                <header className="admin-settings-v2-section-head">
+                  <p className="admin-settings-v2-kicker">{TAB_META.business.kicker}</p>
+                  <h2 className="admin-card-heading">Business &amp; payment</h2>
+                  <p className="admin-settings-desc">
+                    Venue name, address, and contact details appear on hire contracts, T&amp;Cs, invoices, and booking
+                    exports. Bank details show on contract payment pages when filled in.
+                  </p>
+                </header>
+
+                <form onSubmit={saveBusiness} className="admin-settings-v2-form">
+                  <div className="admin-settings-v2-panels">
+                    <article className="admin-settings-v2-panel">
+                      <h3 className="admin-settings-v2-panel-title">Venue &amp; contact</h3>
+                      <div className="admin-settings-v2-fields">
+                        <SettingsInput
+                          id="venue-name"
+                          label="Venue name"
+                          value={business.venueName}
+                          onChange={(v) => setBusiness((b) => (b ? { ...b, venueName: v } : b))}
+                          full
+                        />
+                        <SettingsInput
+                          id="venue-tagline"
+                          label="Tagline"
+                          value={business.venueTagline}
+                          onChange={(v) => setBusiness((b) => (b ? { ...b, venueTagline: v } : b))}
+                          full
+                        />
+                        <SettingsInput
+                          id="venue-address"
+                          label="Address"
+                          value={business.venueAddress}
+                          placeholder={VENUE_ADDRESS}
+                          onChange={(v) => setBusiness((b) => (b ? { ...b, venueAddress: v } : b))}
+                          full
+                        />
+                        <SettingsInput
+                          id="venue-phone"
+                          label="Phone"
+                          type="tel"
+                          value={business.venuePhone}
+                          onChange={(v) => setBusiness((b) => (b ? { ...b, venuePhone: v } : b))}
+                        />
+                        <SettingsInput
+                          id="venue-email"
+                          label="Email"
+                          type="email"
+                          value={business.venueEmail}
+                          onChange={(v) => setBusiness((b) => (b ? { ...b, venueEmail: v } : b))}
+                        />
+                      </div>
+                    </article>
+
+                    <article className="admin-settings-v2-panel admin-settings-v2-panel--accent">
+                      <h3 className="admin-settings-v2-panel-title">Bank details</h3>
+                      <p className="admin-settings-v2-panel-desc">Optional — included on hire contract payment page when set.</p>
+                      <div className="admin-settings-v2-fields">
+                        <SettingsInput
+                          id="bank-name"
+                          label="Bank"
+                          value={business.bankName}
+                          onChange={(v) => setBusiness((b) => (b ? { ...b, bankName: v } : b))}
+                        />
+                        <SettingsInput
+                          id="account-name"
+                          label="Account name"
+                          value={business.accountName}
+                          onChange={(v) => setBusiness((b) => (b ? { ...b, accountName: v } : b))}
+                        />
+                        <SettingsInput
+                          id="sort-code"
+                          label="Sort code"
+                          value={business.sortCode}
+                          onChange={(v) => setBusiness((b) => (b ? { ...b, sortCode: v } : b))}
+                        />
+                        <SettingsInput
+                          id="account-number"
+                          label="Account number"
+                          value={business.accountNumber}
+                          onChange={(v) => setBusiness((b) => (b ? { ...b, accountNumber: v } : b))}
+                        />
+                        <SettingsInput
+                          id="payment-ref"
+                          label="Payment reference hint"
+                          value={business.paymentReference}
+                          onChange={(v) => setBusiness((b) => (b ? { ...b, paymentReference: v } : b))}
+                          full
+                        />
+                      </div>
+                    </article>
                   </div>
-                  <h3 className="admin-settings-subheading">Bank</h3>
-                  <div className="admin-settings-v2-two-col">
-                    <div className="admin-settings-field">
-                      <label>Bank</label>
-                      <input value={business.bankName} onChange={(e) => setBusiness((b) => (b ? { ...b, bankName: e.target.value } : b))} className="admin-table-inline-input" />
-                    </div>
-                    <div className="admin-settings-field">
-                      <label>Account name</label>
-                      <input value={business.accountName} onChange={(e) => setBusiness((b) => (b ? { ...b, accountName: e.target.value } : b))} className="admin-table-inline-input" />
-                    </div>
-                    <div className="admin-settings-field">
-                      <label>Sort code</label>
-                      <input value={business.sortCode} onChange={(e) => setBusiness((b) => (b ? { ...b, sortCode: e.target.value } : b))} className="admin-table-inline-input" />
-                    </div>
-                    <div className="admin-settings-field">
-                      <label>Account no.</label>
-                      <input value={business.accountNumber} onChange={(e) => setBusiness((b) => (b ? { ...b, accountNumber: e.target.value } : b))} className="admin-table-inline-input" />
-                    </div>
-                    <div className="admin-settings-field admin-settings-field--full">
-                      <label>Payment reference hint</label>
-                      <input value={business.paymentReference} onChange={(e) => setBusiness((b) => (b ? { ...b, paymentReference: e.target.value } : b))} className="admin-table-inline-input" />
-                    </div>
-                  </div>
+
                   <div className="admin-settings-form-actions">
                     <button type="submit" className="admin-btn admin-btn-primary" disabled={businessSaving}>
-                      {businessSaving ? "Saving…" : "Save"}
+                      {businessSaving ? "Saving…" : "Save business & bank"}
                     </button>
                   </div>
                 </form>
               </section>
             )}
 
+            {tab === "contract" && (
+              <HireContractSettingsTab initial={hireContract} onSaved={setHireContract} />
+            )}
+
             {tab === "slots" && !bookingSlots && <p className="admin-settings-desc">Could not load slot settings.</p>}
             {tab === "slots" && bookingSlots && (
               <section className="admin-card admin-settings-v2-card admin-slots-settings">
                 <header className="admin-slots-settings-head">
-                  <p className="admin-slots-settings-kicker">Scheduling</p>
+                  <p className="admin-slots-settings-kicker">{TAB_META.slots.kicker}</p>
                   <h2 className="admin-card-heading admin-slots-settings-title">Booking time slots</h2>
                   <p className="admin-slots-settings-lead">
-                    Drives the <strong>contact form</strong>, <strong>Create booking</strong>, and how many events fit on one date.
+                    Drives the <strong>contact form</strong>, <strong>Create booking</strong>, and how many events fit on
+                    one date.
                     <span className="admin-slots-settings-code-hint">
                       {" "}
-                      In the database, <code>event_slot_key</code> on a booking is a slot key (e.g. <code>morning</code>) or{" "}
-                      <strong>empty</strong> for full venue / whole day — same idea as <strong>Edit booking → Full venue</strong>.
+                      In the database, <code>event_slot_key</code> on a booking is a slot key (e.g. <code>morning</code>)
+                      or <strong>empty</strong> for full venue / whole day.
                     </span>
                   </p>
                 </header>
@@ -321,7 +518,7 @@ export default function SettingsPage() {
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify(bookingSlots),
                       });
-                      if (!r.ok) throw new Error("Failed to save");
+                      if (!r.ok) throw new Error(await parseAdminError(r, "Couldn’t save booking slots"));
                       await alert("Booking slots saved.");
                     } catch (err) {
                       await alert(err instanceof Error ? err.message : "Failed");
@@ -337,7 +534,8 @@ export default function SettingsPage() {
                       </div>
                       <h3 className="admin-slots-settings-panel-title">Time bands per day</h3>
                       <p className="admin-slots-settings-panel-desc">
-                        When enabled, clients and staff pick a band (morning, evening…). Turn off for <strong>one whole-venue booking per date</strong> only.
+                        When enabled, clients and staff pick a band (morning, evening…). Turn off for{" "}
+                        <strong>one whole-venue booking per date</strong> only.
                       </p>
                       <label className="admin-slots-settings-toggle-row">
                         <input
@@ -363,7 +561,7 @@ export default function SettingsPage() {
                               s ? { ...s, maxPerSlot: Math.min(20, Math.max(1, parseInt(e.target.value, 10) || 1)) } : s,
                             )
                           }
-                          className="admin-slots-settings-input"
+                          className="admin-slots-settings-input admin-settings-v2-input-narrow"
                         />
                       </div>
                     </article>
@@ -374,7 +572,8 @@ export default function SettingsPage() {
                       </div>
                       <h3 className="admin-slots-settings-panel-title">Full venue (whole day)</h3>
                       <p className="admin-slots-settings-panel-desc">
-                        If the date has <strong>no active bookings</strong> yet, staff can tick this on <strong>Create booking</strong> (cancelled bookings don’t count).
+                        If the date has <strong>no active bookings</strong> yet, staff can tick this on{" "}
+                        <strong>Create booking</strong> (cancelled bookings don’t count).
                       </p>
                       <label className="admin-slots-settings-toggle-row">
                         <input
@@ -432,7 +631,9 @@ export default function SettingsPage() {
                                 value={row.timeLabel}
                                 onChange={(e) =>
                                   setBookingSlots((s) =>
-                                    s ? { ...s, slots: s.slots.map((x, j) => (j === i ? { ...x, timeLabel: e.target.value } : x)) } : s,
+                                    s
+                                      ? { ...s, slots: s.slots.map((x, j) => (j === i ? { ...x, timeLabel: e.target.value } : x)) }
+                                      : s,
                                   )
                                 }
                                 placeholder="9:00 – 12:00"
@@ -510,6 +711,54 @@ export default function SettingsPage() {
                     </button>
                   </footer>
                 </form>
+              </section>
+            )}
+
+            {tab === "guide" && (
+              <section className="admin-card admin-settings-v2-card admin-settings-v2-guide">
+                <header className="admin-settings-v2-section-head">
+                  <p className="admin-settings-v2-kicker">{TAB_META.guide.kicker}</p>
+                  <h2 className="admin-card-heading">CRM user guide (PDF)</h2>
+                  <p className="admin-settings-desc">
+                    Professional staff handbook with visual diagrams — client pipeline, settings hub, booking workspace
+                    tabs, module reference, connection matrix, and daily checklist.
+                  </p>
+                </header>
+
+                <div className="admin-settings-v2-guide-grid">
+                  <ul className="admin-settings-guide-list">
+                    <li>Diagram — Client journey pipeline (8 steps, booking at the centre)</li>
+                    <li>Diagram — Settings hub (logo, business, slots, season pricing → CRM modules)</li>
+                    <li>Diagram — Booking workspace 8 tabs in recommended order</li>
+                    <li>Module reference — every sidebar area with admin paths and bullets</li>
+                    <li>Connection matrix + numbered daily checklist for new staff</li>
+                  </ul>
+
+                  <div className="admin-settings-v2-guide-cta">
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn-primary"
+                      disabled={guideDownloading}
+                      onClick={downloadCrmGuide}
+                    >
+                      {guideDownloading ? "Generating PDF…" : "Download CRM user guide"}
+                    </button>
+                    <Link href="/admin/operations" className="admin-btn admin-btn-ghost">
+                      Operations hub →
+                    </Link>
+                    <p className="admin-settings-v2-guide-tip">
+                      Configure{" "}
+                      <button type="button" className="admin-link-btn" onClick={() => setTab("business")}>
+                        Business &amp; bank
+                      </button>{" "}
+                      and{" "}
+                      <button type="button" className="admin-link-btn" onClick={() => setTab("slots")}>
+                        Booking slots
+                      </button>{" "}
+                      first — the guide assumes those are set up.
+                    </p>
+                  </div>
+                </div>
               </section>
             )}
           </>

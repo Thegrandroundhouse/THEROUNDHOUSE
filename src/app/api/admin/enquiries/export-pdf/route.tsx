@@ -8,6 +8,7 @@ import {
   ENQUIRIES_EXPORT_COLUMNS_DEFAULT,
   type EnquiriesListExportColumns,
 } from "@/lib/enquiries-export-columns";
+import { ADMIN_VENUE_FALLBACK } from "@/lib/venue-constants";
 import { enquiriesEventBounds, type EnquiriesExportBody } from "@/lib/enquiries-export-query";
 
 const SELECT =
@@ -82,7 +83,7 @@ async function pdfResponse(
   filename: string,
   title: string,
 ) {
-  const venueName = process.env.NEXT_PUBLIC_SITE_NAME || "The Grand Roundhouse";
+  const venueName = process.env.NEXT_PUBLIC_SITE_NAME || ADMIN_VENUE_FALLBACK;
   const doc = (
     <EnquiriesListPdfDocument
       venueName={venueName}

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import type { Enquiry, EnquiryStatus } from "@/types/crm";
-import { adminFetch } from "@/lib/admin-api-client";
+import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import { DEFAULT_BOOKING_SLOTS } from "@/lib/booking-slots";
 import { AdminDateAvailabilityAdvisory } from "@/components/admin/AdminDateAvailabilityAdvisory";
@@ -143,7 +143,7 @@ export default function EnquiryDetailPage() {
           ...extra,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseAdminError(res, "Couldn’t save enquiry"));
       const data = await res.json();
       setEnquiry(data);
       setForm((f) => ({
@@ -443,7 +443,7 @@ export default function EnquiryDetailPage() {
                       setHoldPlacing(true);
                       try {
                         const res = await adminFetch(`/api/admin/date-holds/${h.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ released: true }) });
-                        if (!res.ok) throw new Error(await res.text());
+                        if (!res.ok) throw new Error(await parseAdminError(res, "Couldn’t release hold"));
                         await refreshHolds();
                       } catch (e) {
                         await alert(e instanceof Error ? e.message : "Release failed");
@@ -478,7 +478,7 @@ export default function EnquiryDetailPage() {
                     note: `Hold · ${enquiry.name}`,
                   }),
                 });
-                if (!res.ok) throw new Error(await res.text());
+                if (!res.ok) throw new Error(await parseAdminError(res, "Couldn’t place hold"));
                 await refreshHolds();
               } catch (e) {
                 await alert(e instanceof Error ? e.message : "Hold failed");

@@ -65,9 +65,8 @@ export default function AgreementsPage() {
             <p className="admin-dash-kicker">Legal &amp; hire</p>
             <h1 className="admin-page-title admin-bk-title">Agreements</h1>
             <p className="admin-lead admin-bk-lead">
-              Ready-made hire agreements with merge fields (client, date, totals). Set a <strong>preferred</strong> template,
-              edit bodies, add custom placeholders. Library templates cannot be deleted — duplicate to customize. Configure
-              business details on{" "}
+              <strong>Roundhouse Banqueting</strong> hire contracts (4-page PDF + optional T&amp;C) pull line items, totals,
+              and payment schedule from bookings. Legacy text templates remain available. Business details on{" "}
               <Link href="/admin/settings" className="admin-link">
                 Settings → Business
               </Link>

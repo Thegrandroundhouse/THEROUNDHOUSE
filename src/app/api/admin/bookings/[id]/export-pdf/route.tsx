@@ -10,6 +10,8 @@ import {
 } from "@/lib/booking-export-pdf";
 import { writeAuditLog } from "@/lib/audit-log";
 import { getBookingSlotsConfig } from "@/lib/booking-slots";
+import { parseInvoiceBusinessValue } from "@/lib/invoice-business";
+import { VENUE_LEGAL_NAME } from "@/lib/venue-constants";
 
 const DEFAULT_SECTIONS: ExportSections = {
   client: true,
@@ -82,23 +84,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     event_slot_label = def ? `${def.label}${def.timeLabel ? ` · ${def.timeLabel}` : ""}` : String(slotKey).replace(/_/g, " ");
   }
 
-  const venueName = process.env.NEXT_PUBLIC_SITE_NAME || "The Grand Roundhouse";
+  const venueName = process.env.NEXT_PUBLIC_SITE_NAME || VENUE_LEGAL_NAME;
   let business: InvoiceBusinessBlock | null = null;
   try {
     const { data: row } = await supabase.from("site_settings").select("value").eq("key", "invoice_business").maybeSingle();
-    const v = row?.value as Record<string, string> | undefined;
-    if (v && typeof v === "object") {
+    if (row?.value) {
+      const v = parseInvoiceBusinessValue(row.value);
       business = {
-        venueName: String(v.venueName || venueName),
-        venueTagline: String(v.venueTagline || ""),
-        venueAddress: String(v.venueAddress || ""),
-        venuePhone: String(v.venuePhone || ""),
-        venueEmail: String(v.venueEmail || ""),
-        bankName: String(v.bankName || ""),
-        sortCode: String(v.sortCode || ""),
-        accountNumber: String(v.accountNumber || ""),
-        accountName: String(v.accountName || ""),
-        paymentReference: String(v.paymentReference || ""),
+        venueName: v.venueName || venueName,
+        venueTagline: v.venueTagline,
+        venueAddress: v.venueAddress,
+        venuePhone: v.venuePhone,
+        venueEmail: v.venueEmail,
+        bankName: v.bankName,
+        sortCode: v.sortCode,
+        accountNumber: v.accountNumber,
+        accountName: v.accountName,
+        paymentReference: v.paymentReference,
       };
     }
   } catch {

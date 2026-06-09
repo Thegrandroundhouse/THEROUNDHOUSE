@@ -4,12 +4,16 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Booking, BookingStatus } from "@/types/crm";
-import { adminFetch } from "@/lib/admin-api-client";
+import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
+import { BookingQuickEditPanel, openBookingQuickEdit } from "@/components/admin/BookingQuickEditPanel";
 import { BookingWorkspacePanel } from "@/components/admin/BookingWorkspacePanel";
 import { SetReminderModal } from "@/components/admin/SetReminderModal";
-import { AdminDateAvailabilityAdvisory } from "@/components/admin/AdminDateAvailabilityAdvisory";
-import { AgreementLivePreview } from "@/components/admin/AgreementLivePreview";
+import { AgreementGeneratePanel } from "@/components/admin/AgreementGeneratePanel";
+import { BookingSummaryOverview } from "@/components/admin/BookingSummaryOverview";
+import { defaultInstalmentCents } from "@/lib/booking-payment-setup";
+import { AgreementPdfPreviewModal, useAgreementPdfPreview } from "@/components/admin/AgreementPdfPreviewModal";
+import { parseContractData } from "@/lib/build-banqueting-contract";
 import { minSelectableEventDateYYYYMMDD } from "@/lib/min-event-date";
 import {
   BOOKING_COMPLETED_FUTURE_EVENT_MESSAGE,
@@ -148,7 +152,6 @@ export default function BookingDetailPage() {
   const [balancePounds, setBalancePounds] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(false);
   const [exportSections, setExportSections] = useState<ExportSections>({ ...DEFAULT_EXPORT });
   const [exporting, setExporting] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState(false);
@@ -156,40 +159,28 @@ export default function BookingDetailPage() {
   const [packageDetail, setPackageDetail] = useState<PackageDetail | null>(null);
   const [paymentsSummary, setPaymentsSummary] = useState<PaymentsSummary | null>(null);
   const [milestoneDraft, setMilestoneDraft] = useState<Record<string, string>>({});
+  const [milestoneLabel, setMilestoneLabel] = useState<Record<string, string>>({});
   const [milestoneAmt, setMilestoneAmt] = useState<Record<string, string>>({});
   const [milestoneDue, setMilestoneDue] = useState<Record<string, string>>({});
   const [milestoneUpdating, setMilestoneUpdating] = useState<string | null>(null);
+  const [setupPaymentsLoading, setSetupPaymentsLoading] = useState(false);
   const [packagesList, setPackagesList] = useState<{ id: string; name: string; base_price_cents: number | null }[]>([]);
   const [slotDefs, setSlotDefs] = useState<{ key: string; label: string; timeLabel: string }[]>([]);
-  const [sameDate, setSameDate] = useState<{
-    event_date: string;
-    this_booking: { slot_label: string; reserves: string; booking_code?: string | null };
-    others_on_date: { id: string; booking_code: string | null; client_name: string | null; slot_label: string; same_slot_or_overlap: boolean }[];
-  } | null>(null);
-  const [agreementTemplates, setAgreementTemplates] = useState<{ id: string; name: string; is_preferred: boolean }[]>([]);
+  const [agreementTemplates, setAgreementTemplates] = useState<{ id: string; name: string; slug: string; is_preferred: boolean }[]>([]);
   const [bookingAgreements, setBookingAgreements] = useState<
     {
       id: string;
       title: string | null;
       rendered_body: string;
+      custom_values?: unknown;
       client_signed_at: string | null;
       venue_signed_at: string | null;
       created_at?: string;
     }[]
   >([]);
-  const [agreementTemplateId, setAgreementTemplateId] = useState("");
   const [agreementsMigration, setAgreementsMigration] = useState(false);
-  const [agreementVenue, setAgreementVenue] = useState({ name: "", tagline: "" });
-  const [agreementPreview, setAgreementPreview] = useState<(typeof bookingAgreements)[0] | null>(null);
-
-  useEffect(() => {
-    adminFetch("/api/admin/settings/invoice-business")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: { venueName?: string; venueTagline?: string } | null) => {
-        setAgreementVenue({ name: d?.venueName || "", tagline: d?.venueTagline || "" });
-      })
-      .catch(() => setAgreementVenue({ name: "", tagline: "" }));
-  }, []);
+  const [signSaving, setSignSaving] = useState<string | null>(null);
+  const agreementPreview = useAgreementPdfPreview();
 
   const loadPayments = useCallback(() => {
     adminFetch(`/api/admin/payments/booking/${id}`)
@@ -198,15 +189,18 @@ export default function BookingDetailPage() {
         if (d?.totals) {
           setPaymentsSummary({ totals: d.totals, milestones: d.milestones ?? [] });
           const next: Record<string, string> = {};
+          const lb: Record<string, string> = {};
           const am: Record<string, string> = {};
           const du: Record<string, string> = {};
           for (const m of d.milestones ?? []) {
             next[m.id] = m.status;
+            lb[m.id] = m.label;
             am[m.id] =
               m.amount_cents != null && Number.isFinite(m.amount_cents) ? (m.amount_cents / 100).toFixed(2) : "";
             du[m.id] = m.due_date || "";
           }
           setMilestoneDraft(next);
+          setMilestoneLabel(lb);
           setMilestoneAmt(am);
           setMilestoneDue(du);
         } else setPaymentsSummary(null);
@@ -225,13 +219,18 @@ export default function BookingDetailPage() {
       .catch(() => setWsErr(true));
   }, [id]);
 
-  const saveMilestoneRow = async (m: PaymentsSummary["milestones"][0]) => {
+  const saveMilestoneRow = async (
+    m: PaymentsSummary["milestones"][0]
+  ): Promise<{ ok: true; message: string } | { ok: false; message: string }> => {
     const status = milestoneDraft[m.id] ?? m.status;
+    const label = (milestoneLabel[m.id] ?? m.label).trim();
+    if (!label) {
+      return { ok: false, message: "Enter a label for this instalment." };
+    }
     const curA = milestoneAmt[m.id]?.trim() || "";
     const amt_cents = curA ? Math.round(parseFloat(curA.replace(/[^0-9.]/g, "")) * 100) : null;
-    if (curA && (Number.isNaN(amt_cents!) || amt_cents! < 0)) {
-      await alert("Enter a valid amount or leave blank.");
-      return;
+    if (curA && (amt_cents == null || Number.isNaN(amt_cents) || amt_cents < 0)) {
+      return { ok: false, message: "Enter a valid amount in pounds, or leave blank." };
     }
     const due = milestoneDue[m.id]?.trim() || null;
     setMilestoneUpdating(m.id);
@@ -239,17 +238,52 @@ export default function BookingDetailPage() {
       const r = await adminFetch(`/api/admin/payment-milestones/${m.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, amount_cents: amt_cents, due_date: due }),
+        body: JSON.stringify({ status, label, amount_cents: amt_cents, due_date: due }),
       });
       if (!r.ok) {
-        const t = await r.text();
-        await alert(t || "Could not update milestone");
-        return;
+        return { ok: false, message: await parseAdminError(r, "Couldn’t save this instalment") };
       }
       loadPayments();
       loadWorkspace();
+      return { ok: true, message: "Instalment saved." };
     } finally {
       setMilestoneUpdating(null);
+    }
+  };
+
+  const markMilestonePaid = async (
+    m: PaymentsSummary["milestones"][0]
+  ): Promise<{ ok: true; message: string } | { ok: false; message: string }> => {
+    setMilestoneUpdating(m.id);
+    try {
+      const r = await adminFetch(`/api/admin/payment-milestones/${m.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "paid" }),
+      });
+      if (!r.ok) {
+        return { ok: false, message: await parseAdminError(r, "Couldn’t mark as paid") };
+      }
+      setMilestoneDraft((d) => ({ ...d, [m.id]: "paid" }));
+      loadPayments();
+      loadWorkspace();
+      return { ok: true, message: "Marked as paid." };
+    } finally {
+      setMilestoneUpdating(null);
+    }
+  };
+
+  const setupPaymentsSchedule = async () => {
+    setSetupPaymentsLoading(true);
+    try {
+      const r = await adminFetch(`/api/admin/bookings/${id}/setup-payments`, { method: "POST" });
+      if (!r.ok) throw new Error(await parseAdminError(r, "Couldn’t create payment schedule"));
+      loadPayments();
+      loadWorkspace();
+    } catch (e) {
+      await alert(e instanceof Error ? e.message : "Couldn’t create payment schedule");
+    } finally {
+      setSetupPaymentsLoading(false);
     }
   };
 
@@ -329,18 +363,11 @@ export default function BookingDetailPage() {
           { key: "night", label: "Night", timeLabel: "22:00 – 02:00" },
         ]);
       });
-    adminFetch(`/api/admin/bookings/${id}/same-date`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setSameDate)
-      .catch(() => setSameDate(null));
     adminFetch("/api/admin/agreement-templates")
       .then((r) => r.json())
-      .then((d: { rows?: { id: string; name: string; is_preferred: boolean }[]; needsMigration?: boolean }) => {
+      .then((d: { rows?: { id: string; name: string; slug: string; is_preferred: boolean }[]; needsMigration?: boolean }) => {
         if (d.needsMigration) setAgreementsMigration(true);
-        const rows = d.rows || [];
-        setAgreementTemplates(rows);
-        const pref = rows.find((x) => x.is_preferred) || rows[0];
-        if (pref) setAgreementTemplateId(pref.id);
+        setAgreementTemplates(d.rows || []);
       })
       .catch(() => setAgreementTemplates([]));
     adminFetch(`/api/admin/bookings/${id}/agreements`)
@@ -350,7 +377,7 @@ export default function BookingDetailPage() {
         setBookingAgreements(d.rows || []);
       })
       .catch(() => setBookingAgreements([]));
-  }, [id, loadWorkspace]);
+  }, [id, loadWorkspace, loadPayments]);
 
   const eventDateLabel = useMemo(() => {
     if (!form.event_date) return "";
@@ -364,6 +391,15 @@ export default function BookingDetailPage() {
     if (saved && /^\d{4}-\d{2}-\d{2}$/.test(saved) && saved < today) return saved;
     return today;
   }, [booking?.event_date]);
+
+  const instalmentCents = useMemo(() => {
+    if (!booking) return null;
+    return defaultInstalmentCents({
+      total_cents: booking.total_cents,
+      deposit_cents: booking.deposit_cents,
+      balance_cents: booking.balance_cents,
+    });
+  }, [booking?.total_cents, booking?.deposit_cents, booking?.balance_cents]);
 
   /** For overview + availability: whole day vs named slot */
   const thisBookingHolds = useMemo(() => {
@@ -411,18 +447,8 @@ export default function BookingDetailPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: newStatus }),
         });
-        const raw = await res.text();
-        if (!res.ok) {
-          let msg = raw;
-          try {
-            const j = JSON.parse(raw) as { error?: string };
-            if (j.error) msg = j.error;
-          } catch {
-            /* keep raw */
-          }
-          throw new Error(msg);
-        }
-        const data = JSON.parse(raw) as Booking;
+        if (!res.ok) throw new Error(await parseAdminError(res, "Couldn’t update status"));
+        const data = (await res.json()) as Booking;
         setBooking(data);
         setForm((f) => ({ ...f, status: data.status }));
         setSavedFlash(true);
@@ -462,18 +488,8 @@ export default function BookingDetailPage() {
           balance_cents: poundsInputToCents(balancePounds),
         }),
       });
-      const raw = await res.text();
-      if (!res.ok) {
-        let msg = raw;
-        try {
-          const j = JSON.parse(raw) as { error?: string };
-          if (j.error) msg = j.error;
-        } catch {
-          /* keep */
-        }
-        throw new Error(msg);
-      }
-      const data = JSON.parse(raw) as Booking;
+      if (!res.ok) throw new Error(await parseAdminError(res, "Couldn’t save booking"));
+      const data = (await res.json()) as Booking;
       setBooking(data);
       setForm((f) => ({
         ...f,
@@ -512,18 +528,7 @@ export default function BookingDetailPage() {
       return;
     try {
       const res = await adminFetch(`/api/admin/bookings/${id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const t = await res.text();
-        let msg = t;
-        try {
-          const j = JSON.parse(t) as { error?: string };
-          if (j.error) msg = j.error;
-        } catch {
-          /* keep msg */
-        }
-        throw new Error(msg);
-      }
-      setEditModalOpen(false);
+      if (!res.ok) throw new Error(await parseAdminError(res, "Couldn’t delete booking"));
       router.replace("/admin/bookings");
       router.refresh();
     } catch (err) {
@@ -540,7 +545,7 @@ export default function BookingDetailPage() {
         body: JSON.stringify({ sections: exportSections }),
       });
       if (!res.ok) {
-        await alert(await res.text());
+        await alert(await parseAdminError(res, "Export failed"));
         return;
       }
       const blob = await res.blob();
@@ -557,29 +562,71 @@ export default function BookingDetailPage() {
     }
   };
 
-  const agreementPreviewSlotLabel = useMemo(() => {
-    if (thisBookingHolds.mode === "whole_day") return "Full venue (whole day)";
-    return `${thisBookingHolds.label}${thisBookingHolds.timeLabel ? ` · ${thisBookingHolds.timeLabel}` : ""}`;
-  }, [thisBookingHolds]);
-
-  const agreementPreviewEventDate = useMemo(() => {
-    if (!form.event_date || !/^\d{4}-\d{2}-\d{2}$/.test(form.event_date)) return "—";
-    return new Date(form.event_date + "T12:00:00").toLocaleDateString("en-GB", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  }, [form.event_date]);
-
   const fetchAgreementPdfBlob = async (agreementId: string): Promise<Blob | null> => {
     const res = await adminFetch(`/api/admin/bookings/${id}/agreements/${agreementId}/pdf`);
     if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      await alert(typeof j.error === "string" ? j.error : "PDF failed");
+      await alert(await parseAdminError(res, "PDF failed"));
       return null;
     }
     return res.blob();
+  };
+
+  type AgreementRow = (typeof bookingAgreements)[0];
+
+  function agreementPrintChecklist(a: AgreementRow): string {
+    const contract = parseContractData(a.custom_values);
+    const lines: string[] = [`${a.title || "Agreement"}`, ""];
+    if (contract) {
+      lines.push("PDF contents:");
+      lines.push("• Page 1 — Client, event details & contract sum");
+      if (contract.sections.includes) lines.push("• Page 2 — What’s included (+ table linen if enabled)");
+      if (contract.sections.additional_options) lines.push("• Page 3 — Additional options & hourly rates");
+      if (contract.sections.payment_terms) lines.push("• Page 4 — Payment schedule, bank details & acceptance");
+      if (contract.include_terms) {
+        lines.push("• Appendix — Full Terms & Conditions (all sections)");
+      } else {
+        lines.push("• Terms & Conditions — NOT included in this PDF");
+        lines.push("  → Generate or attach the separate T&C document if required.");
+      }
+    } else {
+      lines.push("PDF contents: merged text agreement from template.");
+    }
+    lines.push("");
+    lines.push(`Client signed: ${a.client_signed_at ? "Yes" : "Not ticked yet"}`);
+    lines.push(`Venue signed: ${a.venue_signed_at ? "Yes" : "Not ticked yet"}`);
+    lines.push("");
+    lines.push("Opens the full-colour PDF in a new tab, then your browser print dialog.");
+    return lines.join("\n");
+  }
+
+  const toggleAgreementSigned = async (agreementId: string, field: "client" | "venue", checked: boolean) => {
+    const key = `${agreementId}:${field}`;
+    setSignSaving(key);
+    try {
+      const r = await adminFetch(`/api/admin/bookings/${id}/agreements/${agreementId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(field === "client" ? { client_signed: checked } : { venue_signed: checked }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        await alert(typeof data.error === "string" ? data.error : "Could not save signature status");
+        return;
+      }
+      setBookingAgreements((prev) =>
+        prev.map((x) =>
+          x.id === agreementId
+            ? {
+                ...x,
+                client_signed_at: (data.client_signed_at as string | null) ?? null,
+                venue_signed_at: (data.venue_signed_at as string | null) ?? null,
+              }
+            : x,
+        ),
+      );
+    } finally {
+      setSignSaving(null);
+    }
   };
 
   const downloadAgreementPdf = async (agreementId: string, titleSlug: string) => {
@@ -596,10 +643,28 @@ export default function BookingDetailPage() {
     }
   };
 
-  /** Opens the same PDF as download — print dialog matches the PDF output. */
-  const printAgreementPdf = async (agreementId: string) => {
+  const previewAgreementPdf = async (a: AgreementRow) => {
+    agreementPreview.startLoading(a.title || "Agreement");
     try {
-      const blob = await fetchAgreementPdfBlob(agreementId);
+      const blob = await fetchAgreementPdfBlob(a.id);
+      if (!blob) {
+        agreementPreview.close();
+        return;
+      }
+      agreementPreview.showBlob(blob, a.title || "Agreement", () => downloadAgreementPdf(a.id, a.title || "agreement"));
+    } catch {
+      agreementPreview.showError("Could not load preview");
+    }
+  };
+
+  const printAgreementPdf = async (a: AgreementRow) => {
+    const proceed = await confirm(agreementPrintChecklist(a), {
+      title: "Print agreement",
+      confirmLabel: "Open PDF & print",
+    });
+    if (!proceed) return;
+    try {
+      const blob = await fetchAgreementPdfBlob(a.id);
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       const w = window.open(url, "_blank", "noopener,noreferrer");
@@ -607,9 +672,9 @@ export default function BookingDetailPage() {
         try {
           w?.print();
         } catch {
-          /* Built-in PDF viewer: use File → Print in the new tab if needed */
+          /* use File → Print in the PDF tab if needed */
         }
-      }, 600);
+      }, 800);
       window.setTimeout(() => URL.revokeObjectURL(url), 180000);
     } catch {
       await alert("Could not open PDF for printing");
@@ -632,7 +697,6 @@ export default function BookingDetailPage() {
       return;
     }
     setBookingAgreements((prev) => prev.filter((x) => x.id !== agreementId));
-    setAgreementPreview((p) => (p?.id === agreementId ? null : p));
   };
 
   if (loading) {
@@ -677,15 +741,8 @@ export default function BookingDetailPage() {
           <Link href="/admin/bookings" className="admin-bkd-back">
             ← Bookings
           </Link>
-          <button
-            type="button"
-            className="admin-btn admin-btn-primary"
-            onClick={() => {
-              setSaveError(null);
-              setEditModalOpen(true);
-            }}
-          >
-            Edit booking
+          <button type="button" className="admin-btn admin-btn-primary" onClick={openBookingQuickEdit}>
+            Edit details
           </button>
           <button type="button" className="admin-btn admin-btn-danger admin-btn-ghost" onClick={handleDelete}>
             Delete booking
@@ -733,40 +790,19 @@ export default function BookingDetailPage() {
             {form.client_email ? <p className="admin-bkd-email">{form.client_email}</p> : null}
           </div>
         </header>
-
         {paymentsSummary ? (
-          <div className="admin-bkd-banner-payments" aria-label="Payment milestone status">
+          <div className="admin-bkd-banner-payments">
             <div className="admin-bkd-banner-payments-top">
               <span className="admin-bkd-banner-payments-title">Payments</span>
-              <div className="admin-bkd-banner-payments-totals">
-                <span>
-                  <strong>{formatPounds(paymentsSummary.totals.customer_received)}</strong> collected
-                </span>
+              <span className="admin-bkd-banner-payments-totals">
+                <strong>{formatPounds(paymentsSummary.totals.customer_received)}</strong> collected
                 <span className="admin-bkd-banner-payments-dot">·</span>
-                <span>
-                  <strong>{formatPounds(paymentsSummary.totals.milestone_pending)}</strong> outstanding (schedule)
-                </span>
-              </div>
+                <strong>{formatPounds(paymentsSummary.totals.milestone_pending)}</strong> still due
+              </span>
               <Link href={`/admin/payments/booking/${id}`} className="admin-bkd-banner-payments-link">
                 Ledger →
               </Link>
             </div>
-            {paymentsSummary.milestones.length > 0 ? (
-              <ul className="admin-bkd-banner-payments-chips">
-                {paymentsSummary.milestones.map((m) => {
-                  const label = MILESTONE_STATUS_OPTS.find((o) => o.value === m.status)?.label ?? m.status;
-                  return (
-                    <li key={m.id} className={`admin-bkd-pay-chip admin-bkd-pay-chip--${m.status}`}>
-                      <span className="admin-bkd-pay-chip-label">{m.label}</span>
-                      <span className="admin-bkd-pay-chip-amt">{formatPounds(m.amount_cents)}</span>
-                      <span className="admin-bkd-pay-chip-status">{label}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="admin-bkd-banner-payments-empty">No milestones on file — add in workspace or payment page.</p>
-            )}
           </div>
         ) : null}
       </div>
@@ -782,495 +818,102 @@ export default function BookingDetailPage() {
         </div>
       )}
 
-      {sameDate && (
-        <div
-          className="admin-card"
-          style={{
-            marginBottom: "1rem",
-            padding: "1rem 1.25rem",
-            background: sameDate.this_booking.reserves === "whole_day" ? "rgba(199, 162, 89, 0.12)" : "var(--color-surface)",
-            border: "1px solid var(--color-border)",
-          }}
-        >
-          <h3 className="admin-section-title" style={{ marginTop: 0 }}>
-            This date &amp; slot
-          </h3>
-          <p className="admin-page-desc" style={{ marginBottom: "0.5rem" }}>
-            <strong>This booking</strong> holds{" "}
-            {sameDate.this_booking.reserves === "whole_day" ? (
-              <>the <strong>full venue</strong> on {sameDate.event_date} — no other events can use that day.</>
-            ) : (
-              <>
-                the <strong>{sameDate.this_booking.slot_label}</strong> slot on {sameDate.event_date}.
-              </>
-            )}
-          </p>
-          {sameDate.others_on_date.length > 0 ? (
-            <>
-              <p className="admin-page-desc" style={{ fontWeight: 600, marginBottom: "0.35rem" }}>
-                Other bookings on the same day (different slots or overlap)
-              </p>
-              <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
-                {sameDate.others_on_date.map((o) => (
-                  <li key={o.id} style={{ marginBottom: "0.35rem" }}>
-                    <Link href={`/admin/bookings/${o.id}`} className="admin-link">
-                      {o.booking_code || o.id.slice(0, 8)}
-                    </Link>
-                    {" · "}
-                    {o.client_name || "Client"}
-                    {" · "}
-                    <span style={{ color: "var(--color-text-muted)" }}>{o.slot_label}</span>
-                    {o.same_slot_or_overlap ? (
-                      <span style={{ color: "#b45309", fontWeight: 600 }}> (overlaps your hold)</span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : sameDate.this_booking.reserves !== "whole_day" ? (
-            <p className="admin-vnd-new-hint">No other bookings on this date — only this time slot is taken by you.</p>
-          ) : null}
-        </div>
-      )}
-
-      {agreementPreview ? (
-        <div
-          className="admin-bko-export-backdrop admin-bko-export-backdrop--wide"
-          role="dialog"
-          aria-modal
-          aria-labelledby="agreement-preview-title"
-        >
-          <div className="admin-bko-export-modal admin-bko-export-modal--wide admin-bkd-agreement-preview-modal">
-            <div className="admin-bko-export-head admin-bkd-agreement-preview-head">
-              <h2 id="agreement-preview-title">Agreement preview</h2>
-              <button type="button" className="admin-inv-modal-x" onClick={() => setAgreementPreview(null)} aria-label="Close">
-                ×
-              </button>
-            </div>
-            <p className="admin-bko-export-desc admin-bkd-agreement-preview-desc">
-              Matches the <strong>downloadable PDF</strong> layout (venue strip, hire agreement header, client meta, body). Use <strong>PDF</strong> in the table for the final file.
-            </p>
-            <div className="admin-bkd-agreement-preview-body">
-            <AgreementLivePreview
-              venueName={agreementVenue.name || "Venue"}
-              venueTagline={agreementVenue.tagline}
-              agreementTitle={agreementPreview.title || "Agreement"}
-              clientName={form.client_name || booking?.client_name || "—"}
-              clientEmail={form.client_email || booking?.client_email || ""}
-              eventDate={agreementPreviewEventDate}
-              eventSlotLabel={agreementPreviewSlotLabel}
-              bookingCode={booking?.booking_code || id.slice(0, 8).toUpperCase()}
-              totalGbp={
-                booking?.total_cents != null ? `£${(booking.total_cents / 100).toFixed(2)}` : "—"
-              }
-              bodyText={agreementPreview.rendered_body || ""}
-            />
-            </div>
-            <div className="admin-inv-modal-actions admin-bkd-agreement-preview-actions">
-              <button type="button" className="admin-btn admin-btn-ghost" onClick={() => setAgreementPreview(null)}>
-                Close
-              </button>
-              <button
-                type="button"
-                className="admin-btn admin-btn-primary"
-                onClick={() => downloadAgreementPdf(agreementPreview.id, agreementPreview.title || "agreement")}
-              >
-                Download PDF
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <BookingQuickEditPanel
+        bookingId={id}
+        form={form}
+        setForm={setForm}
+        totalPounds={totalPounds}
+        setTotalPounds={setTotalPounds}
+        depositPounds={depositPounds}
+        setDepositPounds={setDepositPounds}
+        balancePounds={balancePounds}
+        setBalancePounds={setBalancePounds}
+        packagesList={packagesList}
+        slotDefs={slotDefs}
+        minEventDateForInput={minEventDateForInput}
+        thisBookingHolds={thisBookingHolds}
+        onPackageSelect={(rawId) => {
+          const pid = rawId || undefined;
+          const pkg = packagesList.find((p) => p.id === pid);
+          setForm((f) => ({
+            ...f,
+            package_id: pid,
+            package_name: pkg?.name ?? (pid ? f.package_name : "") ?? "",
+          }));
+          if (pkg?.base_price_cents != null && pkg.base_price_cents >= 0) {
+            setTotalPounds(centsToPoundsInput(pkg.base_price_cents));
+          }
+          if (pid && pkg) {
+            adminFetch(`/api/admin/packages/${pid}`)
+              .then((r) => (r.ok ? r.json() : null))
+              .then((detail: PackageDetail | null) => setPackageDetail(detail));
+          } else {
+            setPackageDetail(null);
+          }
+        }}
+        onSave={handleSave}
+        saving={saving}
+        eventDateLabel={eventDateLabel}
+      />
 
       <BookingWorkspacePanel
         bookingId={id}
         overviewSlot={
-          <div className="admin-bko-grid">
-            <div className="admin-bko-card admin-bko-card--wide admin-bko-reservation-hero">
-              <div className="admin-bko-reservation-hero-visual" aria-hidden>
-                {thisBookingHolds.mode === "whole_day" ? (
-                  <span className="admin-bko-reservation-icon admin-bko-reservation-icon--whole">◎</span>
-                ) : (
-                  <span className="admin-bko-reservation-icon admin-bko-reservation-icon--slot">◷</span>
-                )}
-              </div>
-              <div className="admin-bko-reservation-hero-body">
-                <p className="admin-bko-reservation-hero-kicker">Venue reservation</p>
-                {thisBookingHolds.mode === "whole_day" ? (
-                  <>
-                    <p className="admin-bko-reservation-hero-title">Full venue · whole day</p>
-                    <p className="admin-bko-reservation-hero-desc">
-                      This booking uses the <strong>entire venue</strong> for {eventDateLabel || form.event_date}. No other time slots can be sold on this date.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="admin-bko-reservation-hero-title">{thisBookingHolds.label}</p>
-                    {thisBookingHolds.timeLabel ? (
-                      <p className="admin-bko-reservation-hero-time">{thisBookingHolds.timeLabel}</p>
-                    ) : null}
-                    <p className="admin-bko-reservation-hero-desc">
-                      Time band only — other slots on this date may still be available for separate bookings.
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="admin-bko-card">
-              <h3 className="admin-bko-card-title">Client</h3>
-              <p className="admin-bko-card-main">{form.client_name || "—"}</p>
-              <p className="admin-bko-card-meta">{form.client_email}</p>
-              <p className="admin-bko-card-meta">{form.client_phone || "No phone"}</p>
-            </div>
-            <div className="admin-bko-card">
-              <h3 className="admin-bko-card-title">Event</h3>
-              <p className="admin-bko-card-main">{eventDateLabel || form.event_date}</p>
-              <p className="admin-bko-card-meta">{form.event_type || "Type TBD"}</p>
-              <p className="admin-bko-card-meta">Package: {form.package_name || "—"}</p>
-            </div>
-            {packageDetail ? (
-              <div className="admin-bko-card admin-bko-card--wide admin-bko-card--package">
-                <h3 className="admin-bko-card-title">Package in depth</h3>
-                <p className="admin-bko-card-main">{packageDetail.name}</p>
-                {packageDetail.description ? <p className="admin-bko-card-meta admin-bko-pkg-desc">{packageDetail.description}</p> : null}
-                {Array.isArray(packageDetail.line_items) && packageDetail.line_items.length > 0 && (
-                  <dl className="admin-bko-dl admin-bko-pkg-lines">
-                    {packageDetail.line_items.map((line, i) => (
-                      <div key={i}>
-                        <dt>{line.label}</dt>
-                        <dd>{line.description ? `${line.description} · ` : ""}{formatPounds(line.amount_cents)}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-                {Array.isArray(packageDetail.includes) && packageDetail.includes.length > 0 && (
-                  <ul className="admin-bko-pkg-includes">
-                    {packageDetail.includes.map((inc, i) => (
-                      <li key={i}>{inc}</li>
-                    ))}
-                  </ul>
-                )}
-                {packageDetail.base_price_cents != null && (
-                  <p className="admin-bko-card-meta"><strong>Package total</strong> {formatPounds(packageDetail.base_price_cents)}</p>
-                )}
-                <Link href={`/admin/packages/${packageDetail.id}`} className="admin-bko-link" style={{ display: "inline-block", marginTop: "0.5rem" }}>
-                  Edit package →
-                </Link>
-              </div>
-            ) : (form.package_name || (booking as Booking & { package_id?: string | null }).package_id) ? (
-              <div className="admin-bko-card admin-bko-card--package">
-                <h3 className="admin-bko-card-title">Package</h3>
-                <p className="admin-bko-card-meta">{form.package_name || "Linked package"}</p>
-                <Link href="/admin/packages" className="admin-bko-link">Link a package for full details →</Link>
-              </div>
-            ) : null}
-            {form.event_date ? (
-              <div className="admin-bko-card admin-bko-card--wide">
-                <h3 className="admin-bko-card-title">Date &amp; slot availability</h3>
-                <AdminDateAvailabilityAdvisory
-                  date={form.event_date}
-                  excludeBookingId={id}
-                  selectedSlotKey={form.event_slot_key}
-                  thisBookingHolds={thisBookingHolds}
-                />
-              </div>
-            ) : null}
-            <div className="admin-bko-card admin-bko-card--money">
-              <h3 className="admin-bko-card-title">Money</h3>
-              <dl className="admin-bko-dl">
-                <div>
-                  <dt>Total</dt>
-                  <dd>{formatPounds(totalPounds.trim() ? poundsInputToCents(totalPounds) : booking.total_cents)}</dd>
-                </div>
-                <div>
-                  <dt>Deposit</dt>
-                  <dd>{formatPounds(depositPounds.trim() ? poundsInputToCents(depositPounds) : booking.deposit_cents)}</dd>
-                </div>
-                <div>
-                  <dt>Balance</dt>
-                  <dd className="admin-bko-balance">{formatPounds(balancePounds.trim() ? poundsInputToCents(balancePounds) : booking.balance_cents)}</dd>
-                </div>
-              </dl>
-            </div>
-            {overviewStats ? (
-              <div className="admin-bko-card admin-bko-card--wide">
-                <h3 className="admin-bko-card-title">Wedding ops</h3>
-                <div className="admin-bko-chips">
-                  <span className="admin-bko-chip">Guests {overviewStats.guests}</span>
-                  <span className="admin-bko-chip">{overviewStats.milestones} payments</span>
-                  <span className="admin-bko-chip">
-                    Tasks {overviewStats.tasksDone}/{overviewStats.tasks}
-                  </span>
-                  <span className="admin-bko-chip">{overviewStats.vendors} vendors</span>
-                  <span className="admin-bko-chip">{overviewStats.docs} docs</span>
-                  <span className="admin-bko-chip">{overviewStats.comms} comms</span>
-                </div>
-              </div>
-            ) : wsErr ? (
-              <div className="admin-bko-card admin-bko-card--wide admin-bko-card--muted">
-                <p className="admin-bko-card-meta">Workspace summary couldn’t load. Try Refresh below — tabs may be limited.</p>
-                <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" style={{ marginTop: "0.35rem" }} onClick={() => loadWorkspace()}>
-                  Refresh
-                </button>
-              </div>
-            ) : (
-              <div className="admin-bko-card admin-bko-card--wide admin-bko-card--muted">
-                <p className="admin-bko-card-meta">Loading…</p>
-              </div>
-            )}
-            {(form.special_requirements || form.notes) && (
-              <div className="admin-bko-card admin-bko-card--wide">
-                <h3 className="admin-bko-card-title">Notes</h3>
-                {form.special_requirements ? (
-                  <p className="admin-bko-note">
-                    <strong>Special requirements</strong> — {form.special_requirements}
-                  </p>
-                ) : null}
-                {form.notes ? (
-                  <p className="admin-bko-note">
-                    <strong>Internal</strong> — {form.notes}
-                  </p>
-                ) : null}
-              </div>
-            )}
-            <div className="admin-bko-card">
-              <h3 className="admin-bko-card-title">Invoices</h3>
-              {bookingInvoices.length === 0 ? (
-                <p className="admin-bko-card-meta">No invoices linked</p>
-              ) : (
-                <ul style={{ margin: 0, paddingLeft: "1.1rem" }}>
-                  {bookingInvoices.map((inv) => (
-                    <li key={inv.id} style={{ marginBottom: "0.35rem" }}>
-                      <Link href={`/admin/invoices/${inv.id}`} className="admin-bko-link">
-                        {inv.invoice_number}
-                      </Link>
-                      <span className="admin-bko-card-meta" style={{ marginLeft: "0.35rem" }}>
-                        {inv.status} · {formatPounds(inv.amount_cents)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <Link href="/admin/invoices" className="admin-bko-link" style={{ display: "inline-block", marginTop: "0.5rem" }}>
-                {bookingInvoices.length ? "View all / New invoice" : "Create invoice"}
-              </Link>
-            </div>
-            <div
-              className={`admin-bko-card ${paymentsSummary && paymentsSummary.milestones.length > 0 ? "admin-bko-card--wide" : ""}`}
-            >
-              <h3 className="admin-bko-card-title">Payments</h3>
-              {paymentsSummary ? (
-                <>
-                  <dl className="admin-bko-dl">
-                    <div>
-                      <dt>Client received</dt>
-                      <dd>{formatPounds(paymentsSummary.totals.customer_received)}</dd>
-                    </div>
-                    <div>
-                      <dt>Outstanding schedule</dt>
-                      <dd>{formatPounds(paymentsSummary.totals.milestone_pending)}</dd>
-                    </div>
-                  </dl>
-                  <p className="admin-bko-card-meta admin-bko-pay-mile-hint">
-                    Deposit, balance &amp; refunds — set status per milestone (including partial payments).
-                  </p>
-                  {paymentsSummary.milestones.length > 0 ? (
-                    <div className="admin-bko-pay-mile-table-wrap">
-                      <table className="admin-bko-pay-mile-table">
-                        <thead>
-                          <tr>
-                            <th>Milestone</th>
-                            <th>Amount (£)</th>
-                            <th>Due</th>
-                            <th>Status</th>
-                            <th />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {paymentsSummary.milestones.map((m) => {
-                            const cur = milestoneDraft[m.id] ?? m.status;
-                            const curA = milestoneAmt[m.id]?.trim() || "";
-                            const amtCents = curA ? Math.round(parseFloat(curA.replace(/[^0-9.]/g, "")) * 100) : null;
-                            const dirty =
-                              cur !== m.status ||
-                              amtCents !== m.amount_cents ||
-                              (milestoneDue[m.id] || "") !== (m.due_date || "");
-                            return (
-                              <tr key={m.id}>
-                                <td>{m.label}</td>
-                                <td>
-                                  <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    className="admin-bko-pay-mile-input"
-                                    placeholder="0.00"
-                                    value={milestoneAmt[m.id] ?? ""}
-                                    onChange={(e) => setMilestoneAmt((x) => ({ ...x, [m.id]: e.target.value }))}
-                                    aria-label={`Amount ${m.label}`}
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    type="date"
-                                    className="admin-bko-pay-mile-input"
-                                    value={milestoneDue[m.id] ?? ""}
-                                    onChange={(e) => setMilestoneDue((x) => ({ ...x, [m.id]: e.target.value }))}
-                                    aria-label={`Due ${m.label}`}
-                                  />
-                                </td>
-                                <td>
-                                  <select
-                                    className="admin-bko-pay-mile-select"
-                                    value={cur}
-                                    onChange={(e) => setMilestoneDraft((d) => ({ ...d, [m.id]: e.target.value }))}
-                                    aria-label={`Status for ${m.label}`}
-                                  >
-                                    {MILESTONE_STATUS_OPTS.map((o) => (
-                                      <option key={o.value} value={o.value}>
-                                        {o.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </td>
-                                <td>
-                                  <button
-                                    type="button"
-                                    className="admin-btn admin-btn-primary admin-btn-sm"
-                                    disabled={!dirty || milestoneUpdating === m.id}
-                                    onClick={() => saveMilestoneRow(m)}
-                                  >
-                                    {milestoneUpdating === m.id ? "…" : "Save"}
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="admin-bko-card-meta">No milestones yet — add in workspace.</p>
-                  )}
-                  <Link href={`/admin/payments/booking/${id}`} className="admin-bko-link" style={{ display: "inline-block", marginTop: "0.65rem" }}>
-                    Full ledger &amp; record payments →
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <p className="admin-bko-card-meta">Payment schedule couldn’t load. Open the ledger or try again.</p>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.5rem" }}>
-                    <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" onClick={() => loadPayments()}>
-                      Refresh
-                    </button>
-                    <Link href={`/admin/payments/booking/${id}`} className="admin-bko-link">
-                      Payments →
-                    </Link>
-                  </div>
-                </>
-              )}
-            </div>
-            {(form.extras ?? "").trim() ? (
-              <div className="admin-bko-card admin-bko-card--wide">
-                <h3 className="admin-bko-card-title">Extras / add-ons</h3>
-                <p className="admin-bko-note" style={{ whiteSpace: "pre-wrap" }}>{form.extras}</p>
-              </div>
-            ) : null}
-            <div className="admin-bko-card admin-bko-card--record">
-              <h3 className="admin-bko-card-title">Record</h3>
-              <dl className="admin-bko-dl admin-bko-record-fields">
-                <div>
-                  <dt>Booking code</dt>
-                  <dd>
-                    <code className="admin-bko-record-code">{booking.booking_code || "—"}</code>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Client name</dt>
-                  <dd>{form.client_name || "—"}</dd>
-                </div>
-                <div>
-                  <dt>Created</dt>
-                  <dd>{new Date(booking.created_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</dd>
-                </div>
-                <div>
-                  <dt>Last updated</dt>
-                  <dd>{new Date(booking.updated_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</dd>
-                </div>
-              </dl>
-              {booking.enquiry_id ? (
-                <Link href={`/admin/enquiries/${booking.enquiry_id}`} className="admin-bko-link" style={{ display: "inline-block", marginTop: "0.65rem" }}>
-                  Linked enquiry →
-                </Link>
-              ) : null}
-              <div className="admin-bko-record-cal-links">
-                <Link
-                  href={`/admin/calendar?date=${new Date().toISOString().slice(0, 10)}`}
-                  className="admin-bko-link"
-                >
-                  Calendar — today (highlighted) →
-                </Link>
-                {(form.event_date || booking.event_date) && /^\d{4}-\d{2}-\d{2}$/.test(String(form.event_date || booking.event_date)) ? (
-                  <Link
-                    href={`/admin/calendar?date=${form.event_date || booking.event_date}`}
-                    className="admin-bko-link"
-                  >
-                    Event date on calendar →
-                  </Link>
-                ) : null}
-              </div>
-            </div>
-          </div>
+          <BookingSummaryOverview
+            bookingId={id}
+            booking={booking}
+            form={form}
+            thisBookingHolds={thisBookingHolds}
+            totalPounds={totalPounds}
+            depositPounds={depositPounds}
+            balancePounds={balancePounds}
+            poundsInputToCents={poundsInputToCents}
+            paymentsSummary={paymentsSummary}
+            instalmentCents={instalmentCents}
+            milestoneDraft={milestoneDraft}
+            milestoneLabel={milestoneLabel}
+            milestoneAmt={milestoneAmt}
+            milestoneDue={milestoneDue}
+            milestoneUpdating={milestoneUpdating}
+            setMilestoneDraft={setMilestoneDraft}
+            setMilestoneLabel={setMilestoneLabel}
+            setMilestoneAmt={setMilestoneAmt}
+            setMilestoneDue={setMilestoneDue}
+            saveMilestoneRow={saveMilestoneRow}
+            markMilestonePaid={markMilestonePaid}
+            setupPaymentsLoading={setupPaymentsLoading}
+            setupPaymentsSchedule={setupPaymentsSchedule}
+            onPaymentRecorded={() => {
+              loadPayments();
+              loadWorkspace();
+            }}
+            packageDetail={packageDetail}
+          />
         }
         agreementsSlot={
           <div className="admin-bws-agreements-panel">
             <div className="admin-card admin-unified-layout admin-bws-agreements-card">
               <div className="admin-bws-agreements-card-head">
                 <h3 className="admin-section-title" style={{ marginTop: 0 }}>
-                  Hire agreements
+                  Contracts &amp; agreements
                 </h3>
                 <p className="admin-bws-lead admin-bws-lead--compact" style={{ marginBottom: 0 }}>
-                  Printable PDFs (venue header, merged booking data). Manage{" "}
+                  Pick a template and generate. Tick client/venue signed when collected. Hire contract and T&amp;C produce
+                  official PDFs.{" "}
                   <Link href="/admin/agreements" className="admin-link">
-                    templates
+                    Edit templates
                   </Link>
-                  .
                   {agreementsMigration ? (
-                    <span className="admin-bws-agreements-mig"> Agreements aren’t available until templates are set up in the database.</span>
+                    <span className="admin-bws-agreements-mig"> — run migration 039 in Supabase first.</span>
                   ) : null}
                 </p>
               </div>
               {!agreementsMigration && agreementTemplates.length > 0 ? (
-                <div className="admin-bkd-agreements-generate admin-bws-agreements-generate">
-                  <select
-                    className="admin-bk-search"
-                    value={agreementTemplateId}
-                    onChange={(e) => setAgreementTemplateId(e.target.value)}
-                    aria-label="Agreement template"
-                  >
-                    {agreementTemplates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                        {t.is_preferred ? " ★" : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="admin-btn admin-btn-primary admin-btn-sm"
-                    onClick={async () => {
-                      const r = await adminFetch(`/api/admin/bookings/${id}/agreements`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ template_id: agreementTemplateId }),
-                      });
-                      const d = await r.json();
-                      if (!r.ok) await alert(d.error || "Failed");
-                      else setBookingAgreements((prev) => [d, ...prev]);
-                    }}
-                  >
-                    Generate from template
-                  </button>
-                </div>
+                <AgreementGeneratePanel
+                  bookingId={id}
+                  templates={agreementTemplates}
+                  onGenerated={(d) => setBookingAgreements((prev) => [d as (typeof bookingAgreements)[0], ...prev])}
+                />
               ) : null}
               {bookingAgreements.length > 0 ? (
                 <div className="admin-pay-table-wrap admin-bws-agreements-table-wrap">
@@ -1290,8 +933,38 @@ export default function BookingDetailPage() {
                           <td>
                             <span className="admin-pay-client">{a.title || "Agreement"}</span>
                           </td>
-                          <td>{a.client_signed_at ? <span className="admin-badge admin-badge-confirmed">Yes</span> : "—"}</td>
-                          <td>{a.venue_signed_at ? <span className="admin-badge admin-badge-confirmed">Yes</span> : "—"}</td>
+                          <td>
+                            <label className="admin-agreement-sign-check">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(a.client_signed_at)}
+                                disabled={signSaving === `${a.id}:client`}
+                                onChange={(e) => toggleAgreementSigned(a.id, "client", e.target.checked)}
+                                aria-label={`Client signed — ${a.title || "Agreement"}`}
+                              />
+                              <span className="admin-agreement-sign-check-label">
+                                {a.client_signed_at
+                                  ? `Signed ${new Date(a.client_signed_at).toLocaleDateString("en-GB")}`
+                                  : "Not signed"}
+                              </span>
+                            </label>
+                          </td>
+                          <td>
+                            <label className="admin-agreement-sign-check">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(a.venue_signed_at)}
+                                disabled={signSaving === `${a.id}:venue`}
+                                onChange={(e) => toggleAgreementSigned(a.id, "venue", e.target.checked)}
+                                aria-label={`Venue signed — ${a.title || "Agreement"}`}
+                              />
+                              <span className="admin-agreement-sign-check-label">
+                                {a.venue_signed_at
+                                  ? `Signed ${new Date(a.venue_signed_at).toLocaleDateString("en-GB")}`
+                                  : "Not signed"}
+                              </span>
+                            </label>
+                          </td>
                           <td className="admin-table-phone">
                             {a.created_at ? new Date(a.created_at).toLocaleDateString("en-GB") : "—"}
                           </td>
@@ -1299,52 +972,24 @@ export default function BookingDetailPage() {
                             <div className="admin-bkd-agreement-actions admin-bws-agreement-actions">
                               <button
                                 type="button"
+                                className="admin-btn admin-btn-secondary admin-btn-sm"
+                                onClick={() => previewAgreementPdf(a)}
+                              >
+                                Preview
+                              </button>
+                              <button
+                                type="button"
                                 className="admin-btn admin-btn-primary admin-btn-sm"
                                 onClick={() => downloadAgreementPdf(a.id, a.title || "agreement")}
                               >
                                 PDF
                               </button>
-                              <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => setAgreementPreview(a)}>
-                                View
-                              </button>
                               <button
                                 type="button"
-                                className="admin-btn admin-btn-ghost admin-btn-sm"
-                                onClick={() => printAgreementPdf(a.id)}
+                                className="admin-btn admin-btn-secondary admin-btn-sm"
+                                onClick={() => printAgreementPdf(a)}
                               >
                                 Print
-                              </button>
-                              <button
-                                type="button"
-                                className="admin-btn admin-btn-ghost admin-btn-sm"
-                                onClick={async () => {
-                                  await adminFetch(`/api/admin/bookings/${id}/agreements/${a.id}`, {
-                                    method: "PATCH",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ client_signed: true }),
-                                  });
-                                  setBookingAgreements((prev) =>
-                                    prev.map((x) => (x.id === a.id ? { ...x, client_signed_at: new Date().toISOString() } : x)),
-                                  );
-                                }}
-                              >
-                                Client ✓
-                              </button>
-                              <button
-                                type="button"
-                                className="admin-btn admin-btn-ghost admin-btn-sm"
-                                onClick={async () => {
-                                  await adminFetch(`/api/admin/bookings/${id}/agreements/${a.id}`, {
-                                    method: "PATCH",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ venue_signed: true }),
-                                  });
-                                  setBookingAgreements((prev) =>
-                                    prev.map((x) => (x.id === a.id ? { ...x, venue_signed_at: new Date().toISOString() } : x)),
-                                  );
-                                }}
-                              >
-                                Venue ✓
                               </button>
                               <button
                                 type="button"
@@ -1367,218 +1012,6 @@ export default function BookingDetailPage() {
           </div>
         }
       />
-
-      {editModalOpen && (
-        <div className="admin-bko-export-backdrop" role="dialog" aria-modal aria-labelledby="edit-booking-title">
-          <div className="admin-bko-export-modal admin-bkd-edit-modal">
-            <div className="admin-bko-export-head">
-              <h2 id="edit-booking-title">Edit booking</h2>
-              <button type="button" className="admin-inv-modal-x" onClick={() => setEditModalOpen(false)} aria-label="Close">
-                ×
-              </button>
-            </div>
-            <form
-              className="admin-bkd-form-wrap"
-              onSubmit={async (e) => {
-                const ok = await handleSave(e);
-                if (ok) setEditModalOpen(false);
-              }}
-            >
-              {saveError ? (
-                <div className="admin-bkd-edit-banner-err" role="alert">
-                  {saveError}
-                </div>
-              ) : null}
-              <section className="admin-bkd-section">
-                <h3 className="admin-bkd-section-title">Client</h3>
-                <div className="admin-form-grid admin-bkd-grid">
-                  <div className="admin-form-group">
-                    <label>Name</label>
-                    <input value={form.client_name ?? ""} onChange={(e) => setForm((f) => ({ ...f, client_name: e.target.value }))} placeholder="Client name" />
-                  </div>
-                  <div className="admin-form-group">
-                    <label>Email *</label>
-                    <input type="email" required value={form.client_email ?? ""} onChange={(e) => setForm((f) => ({ ...f, client_email: e.target.value }))} />
-                  </div>
-                  <div className="admin-form-group admin-form-full">
-                    <label>Phone</label>
-                    <input type="tel" value={form.client_phone ?? ""} onChange={(e) => setForm((f) => ({ ...f, client_phone: e.target.value }))} />
-                  </div>
-                </div>
-              </section>
-              <section className="admin-bkd-section">
-                <h3 className="admin-bkd-section-title">Event date &amp; slot</h3>
-                <p className="admin-bkd-hint" style={{ marginTop: 0 }}>
-                  <strong>Full venue (whole day)</strong> below = no time band — same as ticking whole venue on{" "}
-                  <Link href="/admin/bookings/new" className="admin-link">
-                    Create booking
-                  </Link>
-                  . Stored as empty <code style={{ fontSize: "0.85em" }}>event_slot_key</code> in the database.
-                </p>
-                <div className="admin-form-grid admin-bkd-grid admin-bkd-edit-event-grid">
-                  <div className="admin-form-group">
-                    <label>Event date *</label>
-                    <input
-                      type="date"
-                      required
-                      min={minEventDateForInput}
-                      value={form.event_date ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, event_date: e.target.value }))}
-                    />
-                  </div>
-                  <div className="admin-form-group">
-                    <label>Time slot or full venue</label>
-                    <select
-                      className="admin-bkd-slot-select"
-                      value={form.event_slot_key == null || form.event_slot_key === "" ? "" : form.event_slot_key}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          event_slot_key: e.target.value === "" ? null : e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Full venue (whole day)</option>
-                      {slotDefs.map((s) => (
-                        <option key={s.key} value={s.key}>
-                          {s.label}{s.timeLabel ? ` · ${s.timeLabel}` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="admin-form-group admin-form-full">
-                    <label>Event type</label>
-                    <input value={form.event_type ?? ""} onChange={(e) => setForm((f) => ({ ...f, event_type: e.target.value }))} placeholder="Wedding, corporate…" />
-                  </div>
-                  {form.event_date ? (
-                    <div className="admin-form-group admin-form-full">
-                      <AdminDateAvailabilityAdvisory
-                        date={form.event_date}
-                        excludeBookingId={id}
-                        selectedSlotKey={form.event_slot_key}
-                        thisBookingHolds={thisBookingHolds}
-                      />
-                    </div>
-                  ) : null}
-                  <div className="admin-form-group admin-form-full">
-                    <label>Package (catalog)</label>
-                    <select
-                      value={form.package_id ?? ""}
-                      onChange={(e) => {
-                        const pid = e.target.value || undefined;
-                        const pkg = packagesList.find((p) => p.id === pid);
-                        setForm((f) => ({
-                          ...f,
-                          package_id: pid,
-                          package_name: pkg?.name ?? (pid ? f.package_name : "") ?? "",
-                        }));
-                        if (pkg?.base_price_cents != null && pkg.base_price_cents >= 0) {
-                          setTotalPounds(centsToPoundsInput(pkg.base_price_cents));
-                        }
-                        if (pid && pkg) {
-                          adminFetch(`/api/admin/packages/${pid}`)
-                            .then((r) => (r.ok ? r.json() : null))
-                            .then((detail: PackageDetail | null) => setPackageDetail(detail));
-                        } else {
-                          setPackageDetail(null);
-                        }
-                      }}
-                    >
-                      <option value="">— None / type below</option>
-                      {packagesList.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                          {p.base_price_cents != null ? ` (£${(p.base_price_cents / 100).toFixed(2)})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="admin-bkd-hint" style={{ marginTop: "0.35rem" }}>
-                      Choosing a package sets the <strong>total</strong> to the package price (you can edit before save). Save to apply.
-                    </p>
-                  </div>
-                  <div className="admin-form-group admin-form-full">
-                    <label>Package name (if no catalog link)</label>
-                    <input value={form.package_name ?? ""} onChange={(e) => setForm((f) => ({ ...f, package_name: e.target.value }))} placeholder="e.g. Full hire" />
-                  </div>
-                  <div className="admin-form-group admin-form-full">
-                    <label>Extras / add-ons</label>
-                    <textarea
-                      rows={3}
-                      value={form.extras ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, extras: e.target.value }))}
-                      placeholder="e.g. Extra hour £200, Cake stand, Late finish"
-                    />
-                  </div>
-                  <div className="admin-form-group admin-form-full">
-                    <label>Status</label>
-                    <div className="admin-bkd-statuses">
-                      {STATUS_OPTIONS.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          className={form.status === s ? "admin-bkd-status admin-bkd-status--on" : "admin-bkd-status"}
-                          onClick={() => setForm((f) => ({ ...f, status: s }))}
-                        >
-                          {STATUS_LABELS[s]}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </section>
-              <section className="admin-bkd-section">
-                <h3 className="admin-bkd-section-title">Figures (£)</h3>
-                <p className="admin-bkd-hint">Enter amounts in pounds (e.g. 12500.50). Leave blank if unknown.</p>
-                <div className="admin-form-grid admin-bkd-grid">
-                  <div className="admin-form-group">
-                    <label>Total</label>
-                    <div className="admin-bkd-pound">
-                      <span className="admin-bkd-pound-prefix">£</span>
-                      <input inputMode="decimal" value={totalPounds} onChange={(e) => setTotalPounds(e.target.value)} placeholder="0.00" />
-                    </div>
-                  </div>
-                  <div className="admin-form-group">
-                    <label>Deposit</label>
-                    <div className="admin-bkd-pound">
-                      <span className="admin-bkd-pound-prefix">£</span>
-                      <input inputMode="decimal" value={depositPounds} onChange={(e) => setDepositPounds(e.target.value)} placeholder="0.00" />
-                    </div>
-                  </div>
-                  <div className="admin-form-group">
-                    <label>Balance due</label>
-                    <div className="admin-bkd-pound">
-                      <span className="admin-bkd-pound-prefix">£</span>
-                      <input inputMode="decimal" value={balancePounds} onChange={(e) => setBalancePounds(e.target.value)} placeholder="0.00" />
-                    </div>
-                  </div>
-                </div>
-              </section>
-              <section className="admin-bkd-section">
-                <h3 className="admin-bkd-section-title">Notes</h3>
-                <div className="admin-form-group">
-                  <label>Special requirements</label>
-                  <textarea rows={3} value={form.special_requirements ?? ""} onChange={(e) => setForm((f) => ({ ...f, special_requirements: e.target.value }))} placeholder="Catering, access, timings…" />
-                </div>
-                <div className="admin-form-group">
-                  <label>Internal notes</label>
-                  <textarea rows={3} value={form.notes ?? ""} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
-                </div>
-              </section>
-              <div className="admin-inv-modal-actions admin-bkd-actions">
-                <button type="button" className="admin-btn admin-btn-danger" onClick={handleDelete}>
-                  Delete booking
-                </button>
-                <button type="button" className="admin-btn admin-btn-ghost" onClick={() => setEditModalOpen(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="admin-btn admin-btn-primary" disabled={saving}>
-                  {saving ? "Saving…" : "Save"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {exportOpen && (
         <div className="admin-bko-export-backdrop admin-bko-export-backdrop--wide" role="dialog" aria-modal aria-labelledby="export-title">
@@ -1648,6 +1081,16 @@ export default function BookingDetailPage() {
           </div>
         </div>
       )}
+
+      <AgreementPdfPreviewModal
+        open={agreementPreview.open}
+        title={agreementPreview.title}
+        pdfUrl={agreementPreview.pdfUrl}
+        loading={agreementPreview.loading}
+        error={agreementPreview.error}
+        onClose={agreementPreview.close}
+        onDownload={agreementPreview.onDownload}
+      />
     </div>
   );
 }

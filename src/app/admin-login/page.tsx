@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ADMIN_APP_NAME, ADMIN_APP_TAGLINE } from "@/lib/venue-constants";
 import { createClient } from "@/lib/supabase/client";
 
 export default function AdminLoginPage() {
@@ -43,8 +44,10 @@ export default function AdminLoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1 className="auth-title">Admin</h1>
-        <p className="auth-sub">The Grand Roundhouse — Staff sign in</p>
+        <h1 className="auth-title">Staff sign in</h1>
+        <p className="auth-sub">
+          {ADMIN_APP_NAME} · {ADMIN_APP_TAGLINE}
+        </p>
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-row">
             <label htmlFor="admin-email">Email</label>

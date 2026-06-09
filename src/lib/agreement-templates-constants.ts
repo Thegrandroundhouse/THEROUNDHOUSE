@@ -4,6 +4,8 @@ export const AGREEMENT_SYSTEM_SLUGS = new Set([
   "deposit-schedule",
   "balance-final",
   "supplier-access",
+  "banqueting-hire-contract",
+  "banqueting-terms-conditions",
 ]);
 
 /** Tokens that must stay exactly as-is in system templates (user can edit other text and other {{tags}}). */

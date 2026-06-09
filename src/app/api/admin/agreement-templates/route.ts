@@ -3,6 +3,7 @@ import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { getAdminClient } from "@/lib/admin-api";
 import { writeAuditLog } from "@/lib/audit-log";
 import { AGREEMENT_SYSTEM_SLUGS } from "@/lib/agreement-templates-constants";
+import { ensureBanquetingTemplates } from "@/lib/banqueting-templates-seed";
 
 function slugify(s: string) {
   return s
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getAdminClient();
   if (!supabase) return NextResponse.json({ error: "Not configured" }, { status: 500 });
+  await ensureBanquetingTemplates(supabase);
   const { data, error } = await supabase
     .from("agreement_templates")
     .select("*")

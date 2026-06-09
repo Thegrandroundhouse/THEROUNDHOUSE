@@ -11,7 +11,7 @@ type Props = { content?: ContentMap; images?: ImagesMap };
 export function GrandAbout({ content = {}, images = {} }: Props) {
   const venueName = content.venue_name ?? siteConfig.venueName;
   const heading = content.about_heading ?? `Welcome to ${siteConfig.venueName}`;
-  const text1 = content.about_text ?? "We are a luxury Wedding and Reception Venue in North London. We are unique because we know that each event will only happen once in a lifetime — and so we do everything possible to ensure perfection for your special day.";
+  const text1 = content.about_text ?? `We are a luxury wedding and reception venue in Dagenham, Essex. We are unique because we know that each event will only happen once in a lifetime — and so we do everything possible to ensure perfection for your special day.`;
   const text2 = content.about_text_2 ?? "We truly care about our clients and always go the extra mile for each and every bride, groom, family and client who comes through our doors.";
   const img = images.about_image?.url ?? DEFAULT_ABOUT_IMG;
   const imgAlt = images.about_image?.alt_text ?? "Grand ballroom with chandeliers and elegant setting";

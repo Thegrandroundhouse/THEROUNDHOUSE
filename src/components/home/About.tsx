@@ -20,8 +20,8 @@ export default function About() {
             The Grand Roundhouse
           </h2>
           <p className="about-text">
-            The Grand Roundhouse is a luxury wedding and reception venue in North
-            London. We are unique because we know that each event will only
+            The Grand Roundhouse is a luxury wedding and reception venue in Dagenham,
+            Essex. We are unique because we know that each event will only
             happen once in a lifetime — and so we do everything possible to
             ensure perfection for your special day.
           </p>

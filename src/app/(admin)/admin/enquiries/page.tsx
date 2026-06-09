@@ -4,7 +4,7 @@ import type React from "react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import type { Enquiry, EnquiryStatus } from "@/types/crm";
-import { adminFetch } from "@/lib/admin-api-client";
+import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { AdminStatsCards } from "@/components/admin/AdminStatsCards";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import { AdminCrmExportModal } from "@/components/admin/AdminCrmExportModal";
@@ -165,7 +165,7 @@ export default function EnquiriesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseAdminError(res, "Export failed"));
       const blob = await res.blob();
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);

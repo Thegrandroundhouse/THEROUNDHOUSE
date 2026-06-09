@@ -8,6 +8,7 @@ import {
   UPCOMING_EXPORT_COLUMNS_DEFAULT,
   type UpcomingListExportColumns,
 } from "@/lib/upcoming-export-columns";
+import { ADMIN_VENUE_FALLBACK } from "@/lib/venue-constants";
 import { upcomingExportBounds, type UpcomingExportBody } from "@/lib/upcoming-export-query";
 
 /** Export upcoming bookings (future, pending/confirmed) as PDF. */
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
   const { data: rows, error } = await qb;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const venueName = process.env.NEXT_PUBLIC_SITE_NAME || "The Grand Roundhouse";
+  const venueName = process.env.NEXT_PUBLIC_SITE_NAME || ADMIN_VENUE_FALLBACK;
   const doc = (
     <UpcomingListPdfDocument
       venueName={venueName}

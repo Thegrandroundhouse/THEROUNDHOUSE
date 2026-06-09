@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { BookingStatus } from "@/types/crm";
-import { adminFetch } from "@/lib/admin-api-client";
+import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import { minSelectableEventDateYYYYMMDD } from "@/lib/min-event-date";
 import {
@@ -53,6 +53,10 @@ function NewBookingForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [packagesError, setPackagesError] = useState<string | null>(null);
+  const [priceError, setPriceError] = useState<string | null>(null);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
   const [packages, setPackages] = useState<Pkg[]>([]);
   const [packageId, setPackageId] = useState("");
   const [priceSource, setPriceSource] = useState<PriceSource | null>(null);
@@ -91,6 +95,9 @@ function NewBookingForm() {
     total_pounds: "",
     deposit_pounds: "",
     balance_pounds: "",
+    payment_received_pounds: "",
+    record_deposit_received: false,
+    payment_received_label: "Deposit",
     special_requirements: "",
     notes: "",
     enquiry_id: "",
@@ -145,8 +152,12 @@ function NewBookingForm() {
       return;
     }
     setSlotsLoading(true);
+    setSlotsError(null);
     fetch(`/api/booking-slots?date=${form.event_date}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Couldn’t load slot availability");
+        return r.json();
+      })
       .then(
         (d: {
           slots?: { key: string; label: string; timeLabel: string; available: boolean }[];
@@ -168,7 +179,10 @@ function NewBookingForm() {
         if (!d.wholeDayAvailable) setWholeDay(false);
       },
       )
-      .catch(() => setSlotRows([]))
+      .catch((err) => {
+        setSlotRows([]);
+        setSlotsError(err instanceof Error ? err.message : "Couldn’t load slot availability");
+      })
       .finally(() => setSlotsLoading(false));
   }, [form.event_date, slotsMultiMode]);
 
@@ -222,11 +236,19 @@ function NewBookingForm() {
   }, [packageHasSlotList, packageId, pkgBandKeys.join(","), JSON.stringify(slotRows.map((r) => [r.key, r.available]))]);
 
   useEffect(() => {
+    setPackagesError(null);
     adminFetch("/api/admin/packages")
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(await parseAdminError(r, "Couldn’t load packages"));
+        return r.json();
+      })
       .then((list: Pkg[] | { rows?: Pkg[] }) => {
         const arr = Array.isArray(list) ? list : list?.rows ?? [];
         setPackages(arr.filter((p) => p.active !== false));
+      })
+      .catch((err) => {
+        setPackages([]);
+        setPackagesError(err instanceof Error ? err.message : "Couldn’t load packages");
       });
   }, []);
 
@@ -269,17 +291,25 @@ function NewBookingForm() {
   const fetchPriceForDate = useCallback((dateStr: string) => {
     if (!dateStr) {
       setPriceSource(null);
+      setPriceError(null);
       return;
     }
+    setPriceError(null);
     adminFetch(`/api/admin/pricing-for-date?date=${dateStr}`)
-      .then((r) => (r.ok ? r.json() : null))
+      .then(async (r) => {
+        if (!r.ok) throw new Error(await parseAdminError(r, "Couldn’t load suggested price"));
+        return r.json();
+      })
       .then((data: PriceSource | null) => {
         setPriceSource(data ?? null);
         if (data?.suggested_total_cents != null) {
           setForm((f) => (f.total_pounds ? f : { ...f, total_pounds: centsToPounds(data.suggested_total_cents!) }));
         }
       })
-      .catch(() => setPriceSource(null));
+      .catch((err) => {
+        setPriceSource(null);
+        setPriceError(err instanceof Error ? err.message : "Couldn’t load suggested price");
+      });
   }, []);
 
   useEffect(() => {
@@ -287,10 +317,38 @@ function NewBookingForm() {
     else setPriceSource(null);
   }, [form.event_date, fetchPriceForDate]);
 
+  const computedBalancePounds = useMemo(() => {
+    const total = poundsToCents(form.total_pounds);
+    const deposit = poundsToCents(form.deposit_pounds);
+    if (total == null || deposit == null || total <= 0) return "";
+    return centsToPounds(Math.max(0, total - deposit));
+  }, [form.total_pounds, form.deposit_pounds]);
+
+  useEffect(() => {
+    if (!form.balance_pounds.trim() && computedBalancePounds) {
+      setForm((f) => ({ ...f, balance_pounds: computedBalancePounds }));
+    }
+  }, [computedBalancePounds, form.balance_pounds]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+    if (!form.client_email.trim()) {
+      const msg = "Client email is required.";
+      setFormError(msg);
+      await alert(msg, { title: "Missing information" });
+      return;
+    }
+    if (!form.event_date) {
+      const msg = "Choose an event date.";
+      setFormError(msg);
+      await alert(msg, { title: "Missing information" });
+      return;
+    }
     if (slotsMultiMode && !wholeDay && !eventSlotKey) {
-      await alert("Choose a time slot, or tick full venue (whole day).");
+      const msg = "Choose a time slot, or tick full venue (whole day).";
+      setFormError(msg);
+      await alert(msg, { title: "Time slot required" });
       return;
     }
     if (packageHasSlotList) {
@@ -313,7 +371,8 @@ function NewBookingForm() {
     }
     const total_cents = poundsToCents(form.total_pounds);
     const deposit_cents = poundsToCents(form.deposit_pounds);
-    const balance_cents = poundsToCents(form.balance_pounds);
+    const balance_cents = poundsToCents(form.balance_pounds || computedBalancePounds);
+    const payment_received_cents = poundsToCents(form.payment_received_pounds);
     setSaving(true);
     try {
       const body: Record<string, unknown> = {
@@ -328,6 +387,14 @@ function NewBookingForm() {
           total_cents,
           deposit_cents,
           balance_cents,
+          record_deposit_received: form.record_deposit_received,
+          payment_received_cents:
+            payment_received_cents && payment_received_cents > 0
+              ? payment_received_cents
+              : form.record_deposit_received && deposit_cents
+                ? deposit_cents
+                : null,
+          payment_received_label: form.payment_received_label,
           special_requirements: form.special_requirements || null,
           notes: form.notes || null,
           enquiry_id: form.enquiry_id || null,
@@ -344,21 +411,13 @@ function NewBookingForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const raw = await res.text();
-      if (!res.ok) {
-        let msg = raw;
-        try {
-          const j = JSON.parse(raw) as { error?: string };
-          if (j.error) msg = j.error;
-        } catch {
-          /* keep */
-        }
-        throw new Error(msg);
-      }
-      const data = JSON.parse(raw) as { id: string };
+      if (!res.ok) throw new Error(await parseAdminError(res, "Couldn’t create booking"));
+      const data = (await res.json()) as { id: string };
       router.push(`/admin/bookings/${data.id}`);
     } catch (err) {
-      await alert(err instanceof Error ? err.message : "Failed to create");
+      const msg = err instanceof Error ? err.message : "Couldn’t create booking";
+      setFormError(msg);
+      await alert(msg, { title: "Couldn’t create booking" });
     } finally {
       setSaving(false);
     }
@@ -390,6 +449,16 @@ function NewBookingForm() {
       </div>
 
       <form id="admin-new-booking-form" onSubmit={handleSubmit} className="admin-unified-layout">
+        {formError ? (
+          <div className="admin-pay-banner" style={{ background: "#fee2e2", borderColor: "#ef4444" }} role="alert">
+            {formError}
+          </div>
+        ) : null}
+        {packagesError ? (
+          <div className="admin-pay-banner" style={{ background: "#fef3c7", borderColor: "#f59e0b" }} role="status">
+            {packagesError} — you can still create a booking without a catalog package.
+          </div>
+        ) : null}
         <section className="admin-card">
           <h2 className="admin-section-title">Client</h2>
           <div className="admin-form-grid">
@@ -500,6 +569,11 @@ function NewBookingForm() {
                 <p className="admin-vnd-new-hint" style={{ marginBottom: "0.65rem" }}>
                   Same logic as <strong>Edit booking</strong> → <strong>Full venue (whole day)</strong> (empty slot in the database). Pick whole day first, or a single band below.
                 </p>
+                {slotsError ? (
+                  <p className="admin-vnd-new-hint" style={{ color: "#b45309", marginBottom: "0.65rem" }} role="alert">
+                    {slotsError}
+                  </p>
+                ) : null}
                 {slotConfig.allowWholeDay ? (
                   <div
                     className={`admin-bk-whole-pick ${wholeDayAvailable && packageAllowsWholeDay ? "admin-bk-whole-pick--ready" : "admin-bk-whole-pick--muted"}`}
@@ -652,7 +726,18 @@ function NewBookingForm() {
                 <span className="admin-vnd-new-hint">Same slots as the contact form. Configure under Settings → Booking slots.</span>
               </div>
             )}
-            {form.event_date && priceSource && (
+            {priceError ? (
+              <div className="admin-form-group admin-form-full" role="alert">
+                <p className="admin-vnd-new-hint" style={{ color: "#b45309", margin: 0 }}>
+                  {priceError} — enter a sale price manually or check{" "}
+                  <Link href="/admin/pricing" className="admin-link">
+                    Season pricing
+                  </Link>
+                  .
+                </p>
+              </div>
+            ) : null}
+            {form.event_date && priceSource && !priceError ? (
               <div className="admin-form-group admin-form-full" style={{ padding: "0.75rem", background: "var(--color-surface)", borderRadius: "var(--radius)", gridColumn: "1 / -1" }}>
                 <strong>Suggested price</strong>
                 {priceSource.suggested_total_cents != null ? (
@@ -666,7 +751,7 @@ function NewBookingForm() {
                   <span style={{ color: "var(--color-text-muted)" }}> No season or day price set for this date</span>
                 )}
               </div>
-            )}
+            ) : null}
             <div className="admin-form-group">
               <label>Total (£) — sale price / override</label>
               <input
@@ -698,12 +783,103 @@ function NewBookingForm() {
           <div className="admin-form-grid">
             <div className="admin-form-group">
               <label>Deposit (£)</label>
-              <input type="text" inputMode="decimal" value={form.deposit_pounds} onChange={(e) => setForm((f) => ({ ...f, deposit_pounds: e.target.value }))} placeholder="0.00" />
+              <input
+                type="text"
+                inputMode="decimal"
+                value={form.deposit_pounds}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    deposit_pounds: e.target.value,
+                    record_deposit_received:
+                      f.record_deposit_received && !e.target.value ? false : f.record_deposit_received,
+                  }))
+                }
+                placeholder="0.00"
+              />
             </div>
             <div className="admin-form-group">
               <label>Balance (£)</label>
-              <input type="text" inputMode="decimal" value={form.balance_pounds} onChange={(e) => setForm((f) => ({ ...f, balance_pounds: e.target.value }))} placeholder="0.00" />
+              <input
+                type="text"
+                inputMode="decimal"
+                value={form.balance_pounds}
+                onChange={(e) => setForm((f) => ({ ...f, balance_pounds: e.target.value }))}
+                placeholder={computedBalancePounds || "0.00"}
+              />
+              {computedBalancePounds ? (
+                <span className="admin-vnd-new-hint">Suggested from total − deposit: {computedBalancePounds}</span>
+              ) : null}
             </div>
+          </div>
+
+          <div className="admin-form-group admin-form-full" style={{ marginTop: "0.75rem" }}>
+            <h3 className="admin-section-title" style={{ fontSize: "0.95rem", marginBottom: "0.5rem" }}>
+              Payment already received
+            </h3>
+            <p className="admin-vnd-new-hint" style={{ marginTop: 0 }}>
+              If the client has already paid (deposit or full hall hire), record it now — creates the payment ledger entry
+              and marks milestones paid.
+            </p>
+          </div>
+          <div className="admin-form-grid">
+            <div className="admin-form-group">
+              <label>Amount received (£)</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={form.payment_received_pounds}
+                onChange={(e) => setForm((f) => ({ ...f, payment_received_pounds: e.target.value }))}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="admin-form-group">
+              <label>Payment type</label>
+              <select
+                value={form.payment_received_label}
+                onChange={(e) => setForm((f) => ({ ...f, payment_received_label: e.target.value }))}
+              >
+                <option value="Deposit">Deposit</option>
+                <option value="Instalment">Instalment</option>
+                <option value="Full hall hire">Full hall hire</option>
+                <option value="Balance">Balance</option>
+              </select>
+            </div>
+          </div>
+          <div className="admin-bkd-contract-checks" style={{ marginTop: "0.5rem" }}>
+            <label className="admin-pkg-slot-chip admin-hire-settings-chip">
+              <input
+                type="checkbox"
+                checked={form.record_deposit_received}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setForm((f) => ({
+                    ...f,
+                    record_deposit_received: checked,
+                    payment_received_pounds:
+                      checked && f.deposit_pounds.trim() ? f.deposit_pounds : f.payment_received_pounds,
+                    payment_received_label: checked ? "Deposit" : f.payment_received_label,
+                  }));
+                }}
+              />
+              <span>Deposit received now (same as deposit £ above)</span>
+            </label>
+            {form.total_pounds.trim() ? (
+              <button
+                type="button"
+                className="admin-btn admin-btn-ghost admin-btn-sm"
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    payment_received_pounds: f.total_pounds,
+                    payment_received_label: "Full hall hire",
+                    record_deposit_received: false,
+                  }))
+                }
+              >
+                Hall fully paid — use total £{form.total_pounds}
+              </button>
+            ) : null}
           </div>
         </section>
 

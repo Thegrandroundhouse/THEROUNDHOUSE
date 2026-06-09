@@ -84,18 +84,18 @@ export function BookingWorkspacePanel({
   };
 
   const TAB_LABELS: Record<WorkspaceTab, string> = {
-    overview: "Overview",
-    wedding: "Wedding",
-    payments: "Payments",
-    agreements: "Agreements",
-    tasks: "Tasks",
-    vendors: "Vendors",
-    docs: "Documents",
-    comms: "Comms",
+    overview: "1 · Summary",
+    wedding: "2 · Event details",
+    agreements: "3 · Contracts",
+    payments: "4 · Payments",
+    tasks: "5 · Tasks",
+    vendors: "6 · Vendors",
+    docs: "7 · Documents",
+    comms: "8 · Comms",
   };
   const TABS: WorkspaceTab[] = overviewSlot
-    ? ["overview", "wedding", "payments", "agreements", "tasks", "vendors", "docs", "comms"]
-    : ["wedding", "payments", "agreements", "tasks", "vendors", "docs", "comms"];
+    ? ["overview", "wedding", "agreements", "payments", "tasks", "vendors", "docs", "comms"]
+    : ["wedding", "agreements", "payments", "tasks", "vendors", "docs", "comms"];
 
   if (err) {
     return (
@@ -120,8 +120,8 @@ export function BookingWorkspacePanel({
   return (
     <section className="admin-bws" aria-label="Booking workspace">
       <div className="admin-bws-head">
-        <h2 className="admin-bws-title">Wedding ops</h2>
-        <p className="admin-bws-sub">Wedding details, payments, hire agreements, tasks, vendors, documents &amp; comms.</p>
+        <h2 className="admin-bws-title">Booking workspace</h2>
+        <p className="admin-bws-sub">Follow the tabs left to right — summary, event, contract, payments, then ops.</p>
       </div>
       <div className="admin-bws-tabs" role="tablist" aria-label="Workspace sections">
         {TABS.map((t) => (
@@ -221,23 +221,45 @@ export function BookingWorkspacePanel({
       )}
       {tab === "payments" && (
         <div className="admin-bws-tab-inner">
-          <p className="admin-bws-lead">Payment milestones: label, amount (pence) and due date.</p>
+          <p className="admin-bws-lead">
+            Hire contract instalments (4×25% by default) — same labels as the contract PDF. Amounts in pounds.
+          </p>
           <div className="admin-bws-card">
             <div className="admin-bws-milestones">
-              {["Deposit", "50% interim", "Final"].map((label, i) => (
-                <div key={label} className="admin-bws-milestone-row">
+              {(
+                ws.milestones.length > 0
+                  ? ws.milestones
+                  : [
+                      { label: "On Booking Confirmation", amount_cents: null, due_date: null, status: "pending" },
+                      { label: "6 months before function", amount_cents: null, due_date: null, status: "pending" },
+                      { label: "4 months before function", amount_cents: null, due_date: null, status: "pending" },
+                      { label: "2 months before function", amount_cents: null, due_date: null, status: "pending" },
+                    ]
+              ).map((m, i) => (
+                <div key={m.label + i} className="admin-bws-milestone-row">
                   <div className="admin-form-group admin-bws-milestone-label">
                     <label>Label</label>
-                    <input type="text" placeholder={label} defaultValue={ws.milestones[i]?.label || label} id={`mil-label-${i}`} />
+                    <input
+                      type="text"
+                      defaultValue={m.label}
+                      id={`mil-label-${i}`}
+                    />
                   </div>
                   <div className="admin-form-group admin-bws-milestone-amt">
-                    <label>Amount (pence)</label>
-                    <input type="number" placeholder="0" defaultValue={ws.milestones[i]?.amount_cents ?? ""} id={`mil-amt-${i}`} />
+                    <label>Amount (£)</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      defaultValue={m.amount_cents != null ? (m.amount_cents / 100).toFixed(2) : ""}
+                      id={`mil-amt-${i}`}
+                    />
                   </div>
                   <div className="admin-form-group admin-bws-milestone-due">
                     <label>Due date</label>
-                    <input type="date" defaultValue={ws.milestones[i]?.due_date?.slice(0, 10) ?? ""} id={`mil-due-${i}`} />
+                    <input type="date" defaultValue={m.due_date?.slice(0, 10) ?? ""} id={`mil-due-${i}`} />
                   </div>
+                  <input type="hidden" id={`mil-status-${i}`} defaultValue={m.status || "pending"} />
                 </div>
               ))}
             </div>
@@ -246,12 +268,17 @@ export function BookingWorkspacePanel({
                 type="button"
                 className="admin-btn admin-btn-primary"
                 onClick={() => {
-                  const milestones = [0, 1, 2].map((i) => ({
-                    label: (document.getElementById(`mil-label-${i}`) as HTMLInputElement).value,
-                    amount_cents: parseInt((document.getElementById(`mil-amt-${i}`) as HTMLInputElement).value, 10) || null,
-                    due_date: (document.getElementById(`mil-due-${i}`) as HTMLInputElement).value || null,
-                    status: "pending",
-                  }));
+                  const rowCount = document.querySelectorAll(".admin-bws-milestone-row").length;
+                  const milestones = Array.from({ length: rowCount }, (_, i) => {
+                    const amtStr = (document.getElementById(`mil-amt-${i}`) as HTMLInputElement).value.trim();
+                    const amt = amtStr ? Math.round(parseFloat(amtStr.replace(/[^0-9.]/g, "")) * 100) : null;
+                    return {
+                      label: (document.getElementById(`mil-label-${i}`) as HTMLInputElement).value,
+                      amount_cents: amt != null && !Number.isNaN(amt) ? amt : null,
+                      due_date: (document.getElementById(`mil-due-${i}`) as HTMLInputElement).value || null,
+                      status: (document.getElementById(`mil-status-${i}`) as HTMLInputElement).value || "pending",
+                    };
+                  });
                   patch({ milestones }, "Payment schedule saved.");
                 }}
               >

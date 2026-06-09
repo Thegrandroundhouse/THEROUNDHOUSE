@@ -4,24 +4,23 @@ import { getAdminClient } from "@/lib/admin-api";
 import { getBookingSlotsConfig } from "@/lib/booking-slots";
 import { mergeAgreementBody } from "@/lib/agreement-merge";
 import { loadAgreementMergeVars } from "@/lib/agreement-merge-load";
-import type { InvoiceBusinessPayload } from "@/app/api/admin/settings/invoice-business/route";
+import type { InvoiceBusinessPayload } from "@/lib/invoice-business";
+import { parseInvoiceBusinessValue } from "@/lib/invoice-business";
+import {
+  buildBanquetingContract,
+  contractDataToSummaryText,
+  applyLineItemTotalsToContract,
+  parseContractData,
+  type BuildContractOptions,
+} from "@/lib/build-banqueting-contract";
+import { ensureBanquetingTemplates, isBanquetingHireSlug } from "@/lib/banqueting-templates-seed";
+import { loadHireContractSettingsFromDb } from "@/lib/hire-contract-settings";
+import type { RoundhouseContractData } from "@/lib/roundhouse-contract-types";
 
 async function loadBusiness(supabase: NonNullable<ReturnType<typeof getAdminClient>>): Promise<InvoiceBusinessPayload | null> {
   const { data } = await supabase.from("site_settings").select("value").eq("key", "invoice_business").maybeSingle();
-  const v = data?.value as Record<string, string> | undefined;
-  if (!v || typeof v !== "object") return null;
-  return {
-    venueName: String(v.venueName || ""),
-    venueTagline: String(v.venueTagline || ""),
-    venueAddress: String(v.venueAddress || ""),
-    venuePhone: String(v.venuePhone || ""),
-    venueEmail: String(v.venueEmail || ""),
-    bankName: String(v.bankName || ""),
-    sortCode: String(v.sortCode || ""),
-    accountNumber: String(v.accountNumber || ""),
-    accountName: String(v.accountName || ""),
-    paymentReference: String(v.paymentReference || ""),
-  };
+  if (!data?.value) return null;
+  return parseInvoiceBusinessValue(data.value);
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -52,6 +51,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const supabase = getAdminClient();
   if (!supabase) return NextResponse.json({ error: "Not configured" }, { status: 500 });
 
+  await ensureBanquetingTemplates(supabase);
+
   const [{ data: booking }, { data: tmpl }] = await Promise.all([
     supabase.from("bookings").select("*").eq("id", bookingId).maybeSingle(),
     supabase.from("agreement_templates").select("*").eq("id", templateId).maybeSingle(),
@@ -59,38 +60,73 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!booking) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   if (!tmpl) return NextResponse.json({ error: "Template not found" }, { status: 404 });
 
-  const config = await getBookingSlotsConfig(supabase);
-  const slotKey = booking.event_slot_key as string | null;
-  const event_slot_label =
-    slotKey && String(slotKey).trim()
-      ? (() => {
-          const def = config.slots.find((s) => s.key === slotKey);
-          return def ? `${def.label}${def.timeLabel ? ` · ${def.timeLabel}` : ""}` : slotKey;
-        })()
-      : "Full venue (whole day)";
-
   const business = await loadBusiness(supabase);
-  const { vars: mergeVars } = await loadAgreementMergeVars(
-    supabase,
-    booking as Record<string, unknown>,
-    business ? { venueName: business.venueName } : null,
-    event_slot_label,
-  );
-  const vars = { ...mergeVars } as Record<string, string>;
-  const customVals = (body.custom_values && typeof body.custom_values === "object" ? body.custom_values : {}) as Record<string, string>;
-  for (const [k, v] of Object.entries(customVals)) {
-    vars[k] = String(v);
+  const slug = String(tmpl.slug || "");
+
+  let rendered: string;
+  let customValues: Record<string, unknown>;
+
+  if (isBanquetingHireSlug(slug)) {
+    let contractData: RoundhouseContractData;
+    const parsed = parseContractData(body.contract);
+    if (parsed) {
+      contractData = parsed;
+    } else {
+      const opts = (body.options && typeof body.options === "object" ? body.options : {}) as BuildContractOptions;
+      const hireSettings = await loadHireContractSettingsFromDb(supabase);
+      contractData = await buildBanquetingContract(
+        supabase,
+        booking as Record<string, unknown>,
+        business,
+        opts,
+        hireSettings,
+      );
+    }
+    rendered = contractDataToSummaryText(contractData);
+    customValues = applyLineItemTotalsToContract(contractData) as unknown as Record<string, unknown>;
+  } else {
+    const config = await getBookingSlotsConfig(supabase);
+    const slotKey = booking.event_slot_key as string | null;
+    const event_slot_label =
+      slotKey && String(slotKey).trim()
+        ? (() => {
+            const def = config.slots.find((s) => s.key === slotKey);
+            return def ? `${def.label}${def.timeLabel ? ` · ${def.timeLabel}` : ""}` : slotKey;
+          })()
+        : "Full venue (whole day)";
+
+    const { vars: mergeVars } = await loadAgreementMergeVars(
+      supabase,
+      booking as Record<string, unknown>,
+      business ? { venueName: business.venueName } : null,
+      event_slot_label,
+    );
+    const vars = { ...mergeVars } as Record<string, string>;
+    const customVals = (body.custom_values && typeof body.custom_values === "object" ? body.custom_values : {}) as Record<
+      string,
+      string
+    >;
+    for (const [k, v] of Object.entries(customVals)) {
+      vars[k] = String(v);
+    }
+    rendered = mergeAgreementBody(tmpl.body as string, vars);
+    customValues = customVals;
   }
-  const rendered = mergeAgreementBody(tmpl.body as string, vars);
+
+  const title =
+    String(body.title || "").trim() ||
+    (isBanquetingHireSlug(slug)
+      ? `Hire contract — ${(booking as { client_name?: string }).client_name || "Client"}`
+      : String(tmpl.name));
 
   const { data, error } = await supabase
     .from("booking_agreements")
     .insert({
       booking_id: bookingId,
       template_id: templateId,
-      title: String(body.title || tmpl.name),
+      title,
       rendered_body: rendered,
-      custom_values: customVals,
+      custom_values: customValues,
       updated_at: new Date().toISOString(),
     })
     .select()

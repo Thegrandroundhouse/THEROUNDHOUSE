@@ -3,8 +3,9 @@
 import { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { adminFetch } from "@/lib/admin-api-client";
+import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
+import { AdminMigrationBanner } from "@/components/admin/AdminMigrationBanner";
 import { AgreementLivePreview } from "@/components/admin/AgreementLivePreview";
 import { mergeAgreementBody, AGREEMENT_EDITOR_PREVIEW_VARS } from "@/lib/agreement-merge";
 
@@ -21,12 +22,18 @@ function NewAgreementTemplateInner() {
   const [preferred, setPreferred] = useState(false);
   const [saving, setSaving] = useState(false);
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
+  const [migration, setMigration] = useState(false);
   const [venue, setVenue] = useState({ name: "The Roundhouse", tagline: "" });
 
   useEffect(() => {
     adminFetch("/api/admin/agreement-templates")
       .then((r) => (r.ok ? r.json() : { rows: [] }))
-      .then((d: { rows?: TemplateRow[] }) => {
+      .then((d: { rows?: TemplateRow[]; needsMigration?: boolean }) => {
+        if (d.needsMigration) {
+          setMigration(true);
+          setTemplates([]);
+          return;
+        }
         const list = Array.isArray(d?.rows) ? d.rows : [];
         setTemplates(list.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name)));
         const hire = list.find((t) => t.slug === "venue-hire-default") || list[0];
@@ -81,8 +88,8 @@ function NewAgreementTemplateInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), body, is_preferred: preferred, custom_fields: [] }),
       });
+      if (!r.ok) throw new Error(await parseAdminError(r, "Couldn’t create template"));
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Failed");
       router.push(`/admin/agreements/${d.id}`);
     } catch (e) {
       await alert(e instanceof Error ? e.message : "Failed");
@@ -122,6 +129,10 @@ function NewAgreementTemplateInner() {
           </div>
         </header>
       </div>
+
+      {migration ? (
+        <AdminMigrationBanner migrationCode="039_banqueting_contract_templates.sql" feature="agreement templates" />
+      ) : null}
 
       <div className="admin-ag-new-v2-grid">
         <div className="admin-ag-new-v2-editor">

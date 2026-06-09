@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { adminFetch } from "@/lib/admin-api-client";
+import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import { SetReminderModal } from "@/components/admin/SetReminderModal";
 
@@ -82,8 +82,7 @@ export default function InvoiceDetailPage() {
         }),
       });
       if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        await alert(d.error || "Failed to save");
+        await alert(await parseAdminError(res, "Couldn’t save invoice"));
         return;
       }
       const data = await res.json();
@@ -94,17 +93,18 @@ export default function InvoiceDetailPage() {
     }
   };
 
-  const downloadPdf = () => {
-    adminFetch(`/api/admin/invoices/${id}/pdf`).then((r) => {
-      if (!r.ok) return alert("PDF failed");
-      return r.blob().then((blob) => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `invoice-${inv?.invoice_number || id}.pdf`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      });
-    });
+  const downloadPdf = async () => {
+    const r = await adminFetch(`/api/admin/invoices/${id}/pdf`);
+    if (!r.ok) {
+      await alert(await parseAdminError(r, "Couldn’t download PDF"));
+      return;
+    }
+    const blob = await r.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `invoice-${inv?.invoice_number || id}.pdf`;
+    a.click();
+    URL.revokeObjectURL(a.href);
   };
 
   const handleDelete = async () => {
@@ -112,7 +112,7 @@ export default function InvoiceDetailPage() {
     if (!ok) return;
     const res = await adminFetch(`/api/admin/invoices/${id}`, { method: "DELETE" });
     if (!res.ok) {
-      await alert("Failed to delete");
+      await alert(await parseAdminError(res, "Couldn’t delete invoice"));
       return;
     }
     router.push("/admin/invoices");

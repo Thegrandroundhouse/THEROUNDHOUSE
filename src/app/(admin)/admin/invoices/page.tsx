@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { adminFetch } from "@/lib/admin-api-client";
+import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import { AdminStatsCards } from "@/components/admin/AdminStatsCards";
 import { AdminDateFilter, getDateRangeFromValue, useDateFilterState } from "@/components/admin/AdminDateFilter";
@@ -74,25 +74,30 @@ export default function InvoicesPage() {
     adminFetch("/api/admin/reminders/sync-due-invoices", { method: "POST" }).catch(() => {});
   }, []);
 
-  const downloadPdf = (id: string) => {
-    adminFetch(`/api/admin/invoices/${id}/pdf`).then((r) => {
-      if (!r.ok) return alert("PDF failed");
-      return r.blob().then((blob) => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `invoice-${id}.pdf`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      });
-    });
+  const downloadPdf = async (id: string) => {
+    const r = await adminFetch(`/api/admin/invoices/${id}/pdf`);
+    if (!r.ok) {
+      await alert(await parseAdminError(r, "Couldn’t download PDF"));
+      return;
+    }
+    const blob = await r.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `invoice-${id}.pdf`;
+    a.click();
+    URL.revokeObjectURL(a.href);
   };
 
   const setStatus = async (id: string, status: string) => {
-    await adminFetch(`/api/admin/invoices/${id}`, {
+    const res = await adminFetch(`/api/admin/invoices/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
+    if (!res.ok) {
+      await alert(await parseAdminError(res, "Couldn’t update invoice status"));
+      return;
+    }
     load();
   };
 

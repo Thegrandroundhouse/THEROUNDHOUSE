@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ADMIN_APP_NAME, ADMIN_APP_TAGLINE } from "@/lib/venue-constants";
 import { createClient } from "@/lib/supabase/client";
 
 const REGISTER_DISABLED =
@@ -64,7 +65,9 @@ export default function LoginPage() {
     <div className="auth-page">
       <div className="auth-card">
         <h1 className="auth-title">Sign in</h1>
-        <p className="auth-sub">The Grand Roundhouse Admin</p>
+        <p className="auth-sub">
+          {ADMIN_APP_NAME} · {ADMIN_APP_TAGLINE}
+        </p>
         <form onSubmit={handleSubmit} className="auth-form" noValidate>
           <div className="form-row">
             <label htmlFor="email">Email</label>

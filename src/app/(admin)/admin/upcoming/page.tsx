@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { adminFetch } from "@/lib/admin-api-client";
+import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { AdminStatsCards } from "@/components/admin/AdminStatsCards";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import { AdminCrmExportModal } from "@/components/admin/AdminCrmExportModal";
@@ -81,7 +81,7 @@ export default function UpcomingBookingsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
-    if (!res.ok) await alert(await res.text().catch(() => "Failed"));
+    if (!res.ok) await alert(await parseAdminError(res, "Couldn’t update status"));
     else {
       if (status === "completed" || status === "cancelled") {
         setRows((prev) => prev.filter((r) => r.id !== bookingId));
@@ -154,7 +154,7 @@ export default function UpcomingBookingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(upcomingExportBody),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseAdminError(res, "Export failed"));
       const blob = await res.blob();
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);

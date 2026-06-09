@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { writeAuditLog } from "@/lib/audit-log";
+import { setupBookingPayments } from "@/lib/booking-payment-setup";
 import { reserveUniqueBookingCode } from "@/lib/booking-code";
 import {
   assertSlotBookable,
@@ -221,11 +222,43 @@ export async function POST(request: Request) {
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (body.enquiry_id) {
+    await supabase
+      .from("enquiries")
+      .update({ status: "converted" })
+      .eq("id", body.enquiry_id)
+      .neq("status", "converted");
+  }
   await supabase
     .from("date_holds")
     .update({ released_at: new Date().toISOString() })
     .eq("hold_date", body.event_date)
     .is("released_at", null);
+
+  const received_cents =
+    body.payment_received_cents != null
+      ? Math.round(Number(body.payment_received_cents) || 0)
+      : body.record_deposit_received && data.deposit_cents
+        ? data.deposit_cents
+        : null;
+
+  try {
+    await setupBookingPayments(supabase, data.id, {
+      total_cents: data.total_cents,
+      deposit_cents: data.deposit_cents,
+      balance_cents: data.balance_cents,
+      received_cents: received_cents && received_cents > 0 ? received_cents : null,
+      received_label:
+        typeof body.payment_received_label === "string" && body.payment_received_label.trim()
+          ? body.payment_received_label.trim()
+          : body.record_deposit_received
+            ? "Deposit"
+            : "Payment",
+    });
+  } catch (payErr) {
+    console.error("setupBookingPayments:", payErr);
+  }
+
   await writeAuditLog(supabase, user, {
     action: "create",
     entity_type: "booking",

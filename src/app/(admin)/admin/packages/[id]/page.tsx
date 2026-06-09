@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { adminFetch } from "@/lib/admin-api-client";
+import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 
 type PkgLine = { label: string; description: string; amount_cents: number };
@@ -122,7 +122,7 @@ export default function PackageDetailPage() {
           event_slot_keys: packageSlotKeys.length ? packageSlotKeys : [],
         }),
       });
-      if (!res.ok) await alert(await res.text());
+      if (!res.ok) await alert(await parseAdminError(res, "Couldn’t save package"));
       else {
         const data = await res.json();
         setPkg(data);
@@ -319,7 +319,7 @@ export default function PackageDetailPage() {
               onClick={async () => {
                 if (!(await confirm("Delete this package? Bookings already using it will keep their copied data.", { variant: "danger" }))) return;
                 const res = await adminFetch(`/api/admin/packages/${id}`, { method: "DELETE" });
-                if (!res.ok) await alert(await res.text());
+                if (!res.ok) await alert(await parseAdminError(res, "Couldn’t save package"));
                 else router.push("/admin/packages");
               }}
             >

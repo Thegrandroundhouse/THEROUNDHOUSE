@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { adminFetch } from "@/lib/admin-api-client";
+import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 
 function gbp(c: number | null) {
@@ -236,7 +236,7 @@ export default function PaymentBookingDetailPage() {
         notes: form.notes || null,
       }),
     });
-    if (!res.ok) await alert(await res.text());
+    if (!res.ok) await alert(await parseAdminError(res, "Couldn’t record payment"));
     else {
       setForm({ flow: "customer_in", amount_pounds: "", label: "", vendor_id: "", notes: "" });
       load();

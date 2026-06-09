@@ -4,6 +4,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { getAdminClient } from "@/lib/admin-api";
 import { InvoicePdfDocument, type InvoiceLinePdf } from "@/lib/invoice-pdf";
+import { VENUE_ADDRESS, VENUE_LEGAL_NAME } from "@/lib/venue-constants";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!(await getAuthUserFromRequest(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -43,9 +44,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const biz = businessRow?.value && typeof businessRow.value === "object" && !Array.isArray(businessRow.value)
     ? (businessRow.value as Record<string, unknown>)
     : null;
-  const venueName = (biz?.venueName as string) || process.env.NEXT_PUBLIC_SITE_NAME || "The Grand Round House";
+  const venueName = (biz?.venueName as string) || process.env.NEXT_PUBLIC_SITE_NAME || VENUE_LEGAL_NAME;
   const venueTagline = (biz?.venueTagline as string) || "Wedding & events venue";
-  const venueAddress = (biz?.venueAddress as string) || process.env.INVOICE_VENUE_ADDRESS || "";
+  const venueAddress = (biz?.venueAddress as string) || process.env.INVOICE_VENUE_ADDRESS || VENUE_ADDRESS;
   const venuePhone = (biz?.venuePhone as string) || "";
   const venueEmail = (biz?.venueEmail as string) || "";
   const bankName = (biz?.bankName as string) || "";

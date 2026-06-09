@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { adminFetch } from "@/lib/admin-api-client";
+import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import { AdminStatsCards } from "@/components/admin/AdminStatsCards";
 
@@ -56,6 +56,7 @@ function CalendarPageInner() {
   const [bookingsByDate, setBookingsByDate] = useState<BookingsByDate>({});
   const [manualBlocked, setManualBlocked] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [rangeEnd, setRangeEnd] = useState<string>("");
   const [rangeBusy, setRangeBusy] = useState(false);
@@ -126,15 +127,17 @@ function CalendarPageInner() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await adminFetch(`/api/admin/calendar-month?year=${year}&month=${month}`);
-      if (!res.ok) throw new Error("Failed");
+      if (!res.ok) throw new Error(await parseAdminError(res, "Couldn’t load calendar"));
       const data = await res.json();
       setBookingsByDate(data.bookingsByDate ?? {});
       setManualBlocked(new Set(data.manualBlockedDates ?? []));
-    } catch {
+    } catch (err) {
       setBookingsByDate({});
       setManualBlocked(new Set());
+      setLoadError(err instanceof Error ? err.message : "Couldn’t load calendar");
     } finally {
       setLoading(false);
     }
@@ -369,6 +372,15 @@ function CalendarPageInner() {
           </div>
         </header>
       </div>
+
+      {loadError ? (
+        <div className="admin-pay-banner" style={{ background: "#fee2e2", borderColor: "#ef4444" }} role="alert">
+          {loadError}
+          <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" style={{ marginLeft: "0.75rem" }} onClick={() => load()}>
+            Retry
+          </button>
+        </div>
+      ) : null}
 
       <div className="admin-stats-unified-wrap">
         <AdminStatsCards

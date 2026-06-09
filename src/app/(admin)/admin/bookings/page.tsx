@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { adminFetch } from "@/lib/admin-api-client";
+import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import Link from "next/link";
 import type { Booking, BookingStatus } from "@/types/crm";
 import { AdminStatsCards } from "@/components/admin/AdminStatsCards";
@@ -127,15 +127,7 @@ export default function BookingsPage() {
       body: JSON.stringify({ status }),
     });
     if (!res.ok) {
-      const raw = await res.text().catch(() => "Failed");
-      let msg = raw;
-      try {
-        const j = JSON.parse(raw) as { error?: string };
-        if (j.error) msg = j.error;
-      } catch {
-        /* keep */
-      }
-      await alert(msg);
+      await alert(await parseAdminError(res, "Couldn’t update booking status"));
       return;
     }
     setList((prev) => prev.map((b) => (b.id === bookingId ? { ...b, status } : b)));
@@ -419,7 +411,7 @@ export default function BookingsPage() {
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify(exportBody),
                       });
-                      if (!res.ok) throw new Error(await res.text());
+                      if (!res.ok) throw new Error(await parseAdminError(res, "Export failed"));
                       const blob = await res.blob();
                       const a = document.createElement("a");
                       a.href = URL.createObjectURL(blob);
@@ -432,7 +424,7 @@ export default function BookingsPage() {
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify(exportBody),
                       });
-                      if (!res.ok) throw new Error(await res.text());
+                      if (!res.ok) throw new Error(await parseAdminError(res, "Export failed"));
                       const blob = await res.blob();
                       const a = document.createElement("a");
                       a.href = URL.createObjectURL(blob);
