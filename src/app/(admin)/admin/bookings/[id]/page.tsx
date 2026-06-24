@@ -7,7 +7,8 @@ import type { Booking, BookingStatus } from "@/types/crm";
 import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import { BookingQuickEditPanel, openBookingQuickEdit } from "@/components/admin/BookingQuickEditPanel";
-import { BookingWorkspacePanel } from "@/components/admin/BookingWorkspacePanel";
+import { BookingWorkspacePanel, type WorkspaceTab } from "@/components/admin/BookingWorkspacePanel";
+import { BookingPaymentsTab } from "@/components/admin/BookingPaymentsTab";
 import { SetReminderModal } from "@/components/admin/SetReminderModal";
 import { AgreementGeneratePanel } from "@/components/admin/AgreementGeneratePanel";
 import { BookingSummaryOverview } from "@/components/admin/BookingSummaryOverview";
@@ -19,6 +20,7 @@ import {
   BOOKING_COMPLETED_FUTURE_EVENT_MESSAGE,
   isEventDateInFutureLondon,
 } from "@/lib/booking-status-rules";
+import { bookingMoneyFromLedger } from "@/lib/booking-money-summary";
 
 const STATUS_OPTIONS: BookingStatus[] = ["pending", "confirmed", "cancelled", "completed"];
 const STATUS_LABELS: Record<BookingStatus, string> = {
@@ -180,6 +182,7 @@ export default function BookingDetailPage() {
   >([]);
   const [agreementsMigration, setAgreementsMigration] = useState(false);
   const [signSaving, setSignSaving] = useState<string | null>(null);
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("overview");
   const agreementPreview = useAgreementPdfPreview();
 
   const loadPayments = useCallback(() => {
@@ -748,12 +751,21 @@ export default function BookingDetailPage() {
             type="button"
             className="admin-btn admin-btn-ghost"
             onClick={() => {
-              const contractTab = document.querySelector<HTMLButtonElement>(".admin-bws-tab--primary:nth-child(2)");
-              contractTab?.click();
+              setWorkspaceTab("agreements");
               document.querySelector(".admin-bws")?.scrollIntoView({ behavior: "smooth" });
             }}
           >
             Contract
+          </button>
+          <button
+            type="button"
+            className="admin-btn admin-btn-ghost"
+            onClick={() => {
+              setWorkspaceTab("payments");
+              document.querySelector(".admin-bws")?.scrollIntoView({ behavior: "smooth" });
+            }}
+          >
+            Payments
           </button>
           <details className="admin-bkd-more-actions">
             <summary className="admin-btn admin-btn-ghost">More</summary>
@@ -811,16 +823,28 @@ export default function BookingDetailPage() {
           </div>
         </header>
         {paymentsSummary ? (
-          <div className="admin-bkd-banner-payments">
-            <div className="admin-bkd-banner-payments-top">
-              <span className="admin-bkd-banner-payments-title">Money</span>
-              <span className="admin-bkd-banner-payments-totals">
-                <strong>{formatPounds(paymentsSummary.totals.customer_received)}</strong> collected
-                <span className="admin-bkd-banner-payments-dot">·</span>
-                <strong>{formatPounds(paymentsSummary.totals.milestone_pending)}</strong> still owed
-              </span>
-            </div>
-          </div>
+          (() => {
+            const money = bookingMoneyFromLedger(
+              poundsInputToCents(totalPounds) ?? booking.total_cents,
+              paymentsSummary.totals.customer_received,
+            );
+            return (
+              <div className="admin-money-strip admin-money-strip--lg" aria-label="Booking money summary">
+                <div className="admin-money-strip-stat">
+                  <span className="admin-money-strip-label">Total</span>
+                  <strong className="admin-money-strip-val">{formatPounds(money.totalCents)}</strong>
+                </div>
+                <div className="admin-money-strip-stat admin-money-strip-stat--ok">
+                  <span className="admin-money-strip-label">Paid</span>
+                  <strong className="admin-money-strip-val">{formatPounds(money.paidCents)}</strong>
+                </div>
+                <div className="admin-money-strip-stat admin-money-strip-stat--due">
+                  <span className="admin-money-strip-label">Still due</span>
+                  <strong className="admin-money-strip-val">{formatPounds(money.stillDueCents)}</strong>
+                </div>
+              </div>
+            );
+          })()
         ) : null}
       </div>
 
@@ -874,6 +898,8 @@ export default function BookingDetailPage() {
 
       <BookingWorkspacePanel
         bookingId={id}
+        activeTab={workspaceTab}
+        onTabChange={setWorkspaceTab}
         overviewSlot={
           <BookingSummaryOverview
             bookingId={id}
@@ -883,6 +909,23 @@ export default function BookingDetailPage() {
             totalPounds={totalPounds}
             depositPounds={depositPounds}
             balancePounds={balancePounds}
+            poundsInputToCents={poundsInputToCents}
+            paymentsSummary={paymentsSummary}
+            instalmentCents={instalmentCents}
+            onPaymentRecorded={() => {
+              loadPayments();
+              loadWorkspace();
+            }}
+            onOpenPayments={() => setWorkspaceTab("payments")}
+            packageDetail={packageDetail}
+          />
+        }
+        paymentsSlot={
+          <BookingPaymentsTab
+            bookingId={id}
+            booking={booking}
+            totalPounds={totalPounds}
+            depositPounds={depositPounds}
             poundsInputToCents={poundsInputToCents}
             paymentsSummary={paymentsSummary}
             instalmentCents={instalmentCents}
@@ -903,7 +946,6 @@ export default function BookingDetailPage() {
               loadPayments();
               loadWorkspace();
             }}
-            packageDetail={packageDetail}
           />
         }
         agreementsSlot={

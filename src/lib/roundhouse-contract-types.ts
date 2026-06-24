@@ -106,6 +106,12 @@ export type RoundhouseContractData = {
   subtotalCents: number;
   discountTotalCents: number;
   contractSumCents: number;
+  /** Amount already received from the client — prints on page 1 when set. */
+  paidCents?: number;
+  /** Outstanding balance — defaults to contract sum minus paid. */
+  balanceDueCents?: number;
+  /** Show paid / balance summary on page 1 (default true). */
+  showPaymentSummaryOnCover?: boolean;
   introParagraph: string;
   includesNotes: string;
   editableNotes: string;

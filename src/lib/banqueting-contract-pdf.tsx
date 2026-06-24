@@ -9,6 +9,7 @@ import {
   type RoundhouseContractData,
   type RoundhouseIncludeBullets,
 } from "@/lib/roundhouse-contract-types";
+import { resolveContractPaymentSummary } from "@/lib/build-banqueting-contract";
 import { resolveTermsSections } from "@/lib/banqueting-terms-render";
 import { formatGbp, hasContractBankDetails } from "@/lib/build-banqueting-contract";
 import {
@@ -139,6 +140,28 @@ function IncludesSection({ data }: { data: RoundhouseContractData }) {
   );
 }
 
+function PaymentSummaryBox({ data }: { data: RoundhouseContractData }) {
+  if (data.showPaymentSummaryOnCover === false) return null;
+  const { paidCents, balanceDueCents } = resolveContractPaymentSummary(data);
+  return (
+    <View style={theme.paymentSummaryBox} wrap={false}>
+      <Text style={theme.paymentSummaryTitle}>Payment summary</Text>
+      <View style={theme.paymentSummaryRow}>
+        <Text style={theme.paymentSummaryLabel}>Contract sum</Text>
+        <Text style={theme.paymentSummaryVal}>{formatGbp(data.contractSumCents)}</Text>
+      </View>
+      <View style={theme.paymentSummaryRow}>
+        <Text style={theme.paymentSummaryLabel}>Amount paid to date</Text>
+        <Text style={theme.paymentSummaryVal}>{formatGbp(paidCents)}</Text>
+      </View>
+      <View style={theme.paymentSummaryRow}>
+        <Text style={theme.paymentSummaryLabel}>Balance due</Text>
+        <Text style={theme.paymentSummaryDue}>{formatGbp(balanceDueCents)}</Text>
+      </View>
+    </View>
+  );
+}
+
 function LineItemsTable({ data }: { data: RoundhouseContractData }) {
   const included = data.lineItems.filter((r) => r.included);
   return (
@@ -174,6 +197,7 @@ function LineItemsTable({ data }: { data: RoundhouseContractData }) {
         <Text style={theme.totalLabel}>Contract sum</Text>
         <Text style={theme.totalVal}>{formatGbp(data.contractSumCents)}</Text>
       </View>
+      <PaymentSummaryBox data={data} />
     </>
   );
 }

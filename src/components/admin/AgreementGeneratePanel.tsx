@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import { AgreementPdfPreviewModal, useAgreementPdfPreview } from "@/components/admin/AgreementPdfPreviewModal";
-import { calcLineItems, formatGbp, applyBusinessBankToContract, hasContractBankDetails, applyLineItemTotalsToContract } from "@/lib/build-banqueting-contract";
+import { calcLineItems, formatGbp, applyBusinessBankToContract, hasContractBankDetails, applyLineItemTotalsToContract, resolveContractPaymentSummary } from "@/lib/build-banqueting-contract";
 import type { InvoiceBusinessPayload } from "@/app/api/admin/settings/invoice-business/route";
 import {
   BANQUETING_HIRE_SLUG,
@@ -90,6 +90,7 @@ export function AgreementGeneratePanel({
   const [generating, setGenerating] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [settingsBusiness, setSettingsBusiness] = useState<InvoiceBusinessPayload | null>(null);
+  const balanceManualRef = useRef(false);
 
   const selectedTemplate = templates.find((t) => t.id === templateId);
   const isHireContract = selectedTemplate?.slug === BANQUETING_HIRE_SLUG;
@@ -148,6 +149,55 @@ export function AgreementGeneratePanel({
     if (!draft) return { subtotalCents: 0, discountTotalCents: 0, contractSumCents: 0 };
     return calcLineItems(draft.lineItems);
   }, [draft?.lineItems]);
+
+  const paymentSummary = useMemo(() => {
+    if (!draft) return { paidCents: 0, balanceDueCents: 0 };
+    return resolveContractPaymentSummary({ ...draft, ...totals });
+  }, [draft, totals]);
+
+  const updatePaidCents = (cents: number) => {
+    setDraft((d) => {
+      if (!d) return d;
+      const paidCents = Math.max(0, cents);
+      const balanceDueCents = balanceManualRef.current
+        ? Math.max(0, d.balanceDueCents ?? totals.contractSumCents - paidCents)
+        : Math.max(0, totals.contractSumCents - paidCents);
+      return { ...d, paidCents, balanceDueCents };
+    });
+  };
+
+  const updateBalanceDueCents = (cents: number) => {
+    balanceManualRef.current = true;
+    setDraft((d) => (d ? { ...d, balanceDueCents: Math.max(0, cents) } : d));
+  };
+
+  const syncBalanceFromPaid = () => {
+    balanceManualRef.current = false;
+    setDraft((d) =>
+      d ? { ...d, balanceDueCents: Math.max(0, totals.contractSumCents - (d.paidCents ?? 0)) } : d,
+    );
+  };
+
+  const pullPaidFromBooking = async () => {
+    try {
+      const r = await adminFetch(`/api/admin/payments/booking/${bookingId}`);
+      if (!r.ok) throw new Error(await parseAdminError(r, "Couldn’t load payments"));
+      const d = (await r.json()) as { totals?: { customer_received?: number } };
+      const paid = d.totals?.customer_received ?? 0;
+      balanceManualRef.current = false;
+      setDraft((prev) =>
+        prev
+          ? {
+              ...prev,
+              paidCents: paid,
+              balanceDueCents: Math.max(0, totals.contractSumCents - paid),
+            }
+          : prev,
+      );
+    } catch (e) {
+      await alert(e instanceof Error ? e.message : "Couldn’t load payments");
+    }
+  };
 
   const updateLine = (id: string, patch: Partial<ContractLineItem>) => {
     setDraft((d) => {
@@ -539,6 +589,57 @@ export function AgreementGeneratePanel({
         </button>
       </div>
 
+      {isHireContract && draft ? (
+        <div className="admin-bkd-contract-pay-strip">
+          <div className="admin-bkd-contract-pay-strip-head">
+            <h3 className="admin-bkd-contract-pay-strip-title">Payment on page 1</h3>
+            <p className="admin-vnd-new-hint">
+              Set what prints on the first page before you preview or generate the PDF.
+            </p>
+          </div>
+          <div className="admin-bkd-contract-pay-strip-grid">
+            <div className="admin-bkd-contract-pay-field">
+              <span className="admin-bkd-contract-pay-label">Contract total</span>
+              <strong className="admin-bkd-contract-pay-readout">{formatGbp(totals.contractSumCents)}</strong>
+            </div>
+            <label className="admin-bkd-contract-pay-field">
+              <span className="admin-bkd-contract-pay-label">Amount paid £</span>
+              <input
+                className="admin-table-inline-input"
+                value={centsToPounds(draft.paidCents ?? paymentSummary.paidCents)}
+                onChange={(e) => updatePaidCents(poundsToCents(e.target.value))}
+              />
+            </label>
+            <label className="admin-bkd-contract-pay-field">
+              <span className="admin-bkd-contract-pay-label">Balance due £</span>
+              <input
+                className="admin-table-inline-input"
+                value={centsToPounds(draft.balanceDueCents ?? paymentSummary.balanceDueCents)}
+                onChange={(e) => updateBalanceDueCents(poundsToCents(e.target.value))}
+              />
+            </label>
+          </div>
+          <div className="admin-bkd-contract-pay-strip-actions">
+            <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" onClick={pullPaidFromBooking}>
+              Pull paid from booking
+            </button>
+            <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" onClick={syncBalanceFromPaid}>
+              Balance = total − paid
+            </button>
+            <label className="admin-bkd-contract-pay-print">
+              <input
+                type="checkbox"
+                checked={draft.showPaymentSummaryOnCover !== false}
+                onChange={(e) =>
+                  setDraft((d) => (d ? { ...d, showPaymentSummaryOnCover: e.target.checked } : d))
+                }
+              />
+              Print on page 1
+            </label>
+          </div>
+        </div>
+      ) : null}
+
       {isTermsPdf && expanded ? (
         <div className="admin-bkd-contract-gen-body">
           <p className="admin-vnd-new-hint" style={{ marginBottom: "0.75rem" }}>
@@ -596,6 +697,14 @@ export function AgreementGeneratePanel({
               <input
                 value={draft.client.phone}
                 onChange={(e) => setDraft((d) => (d ? { ...d, client: { ...d.client, phone: e.target.value } } : d))}
+              />
+            </div>
+            <div className="admin-form-group admin-form-full">
+              <label>Address</label>
+              <input
+                value={draft.client.address}
+                onChange={(e) => setDraft((d) => (d ? { ...d, client: { ...d.client, address: e.target.value } } : d))}
+                placeholder="Client address for the contract"
               />
             </div>
             <div className="admin-form-group">

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { writeAuditLog } from "@/lib/audit-log";
 import { setupBookingPayments } from "@/lib/booking-payment-setup";
+import { bookingMoneyFromLedger } from "@/lib/booking-money-summary";
 import { reserveUniqueBookingCode } from "@/lib/booking-code";
 import {
   assertSlotBookable,
@@ -77,9 +78,8 @@ export async function GET(request: Request) {
   }
   const rows = bookingRows.map((b: { id: string; total_cents: number | null }) => {
     const paid_cents = paidByBooking[b.id] ?? 0;
-    const total = b.total_cents ?? 0;
-    const due_cents = total > 0 ? Math.max(0, total - paid_cents) : null;
-    return { ...b, paid_cents, due_cents };
+    const { stillDueCents: due_cents } = bookingMoneyFromLedger(b.total_cents, paid_cents);
+    return { ...b, paid_cents, due_cents: b.total_cents != null ? due_cents : null };
   });
 
   const now = new Date();

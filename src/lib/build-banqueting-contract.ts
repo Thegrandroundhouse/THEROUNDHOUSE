@@ -120,10 +120,19 @@ export function applyLineItemTotalsToContract(data: RoundhouseContractData): Rou
   const lineItems = normalizeContractLineItems(data.lineItems);
   const totals = calcLineItems(lineItems);
   const schedule = rescalePaymentSchedule(data.paymentTerms.schedule, data.contractSumCents, totals.contractSumCents);
+  const paidCents = Math.max(0, data.paidCents ?? 0);
+  const oldAutoBalance = Math.max(0, data.contractSumCents - paidCents);
+  const balanceWasManual =
+    data.balanceDueCents != null && data.balanceDueCents !== oldAutoBalance;
+  const balanceDueCents = balanceWasManual
+    ? Math.max(0, data.balanceDueCents!)
+    : Math.max(0, totals.contractSumCents - paidCents);
   return {
     ...data,
     lineItems,
     ...totals,
+    paidCents,
+    balanceDueCents,
     paymentTerms: { ...data.paymentTerms, schedule },
   };
 }
@@ -154,7 +163,22 @@ export type BuildContractOptions = {
   startTime?: string;
   endTime?: string;
   hirePeriod?: string;
+  paidCents?: number;
+  balanceDueCents?: number;
+  showPaymentSummaryOnCover?: boolean;
 };
+
+export function resolveContractPaymentSummary(data: RoundhouseContractData): {
+  paidCents: number;
+  balanceDueCents: number;
+} {
+  const paidCents = Math.max(0, data.paidCents ?? 0);
+  const balanceDueCents =
+    data.balanceDueCents != null
+      ? Math.max(0, data.balanceDueCents)
+      : Math.max(0, data.contractSumCents - paidCents);
+  return { paidCents, balanceDueCents };
+}
 
 export async function buildBanquetingContract(
   supabase: SupabaseClient,
@@ -214,7 +238,7 @@ export async function buildBanquetingContract(
   const lineItems = overrides.lineItems?.length ? normalizeContractLineItems(overrides.lineItems) : packageLineItems;
   const totals = calcLineItems(lineItems);
 
-  const [{ data: wd }, { data: ms }] = await Promise.all([
+  const [{ data: wd }, { data: ms }, { data: paymentRecs }] = await Promise.all([
     bookingId
       ? supabase.from("booking_wedding_details").select("guest_count").eq("booking_id", bookingId).maybeSingle()
       : Promise.resolve({ data: null }),
@@ -225,7 +249,20 @@ export async function buildBanquetingContract(
           .eq("booking_id", bookingId)
           .order("sort_order")
       : Promise.resolve({ data: [] as unknown[] }),
+    bookingId
+      ? supabase.from("payment_records").select("amount_cents, flow").eq("booking_id", bookingId)
+      : Promise.resolve({ data: [] as unknown[] }),
   ]);
+
+  type PaymentRecRow = { amount_cents: number | null; flow: string };
+  const paidFromLedger = ((paymentRecs ?? []) as PaymentRecRow[])
+    .filter((r) => r.flow === "customer_in")
+    .reduce((sum, r) => sum + (Number(r.amount_cents) || 0), 0);
+  const paidCents = Math.max(0, overrides.paidCents ?? paidFromLedger);
+  const balanceDueCents = Math.max(
+    0,
+    overrides.balanceDueCents ?? totals.contractSumCents - paidCents,
+  );
 
   const guestCount =
     overrides.guestCount ||
@@ -329,6 +366,9 @@ export async function buildBanquetingContract(
     },
     lineItems,
     ...totals,
+    paidCents,
+    balanceDueCents,
+    showPaymentSummaryOnCover: overrides.showPaymentSummaryOnCover ?? true,
     introParagraph:
       overrides.introParagraph ||
       applyLegalNameTemplate(hireSettings.introParagraph, legalName),

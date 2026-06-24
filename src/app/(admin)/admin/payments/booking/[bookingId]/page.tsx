@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
+import { bookingCollectPercent, bookingMoneyFromLedger } from "@/lib/booking-money-summary";
 
 function gbp(c: number | null) {
   if (c == null) return "—";
@@ -255,9 +256,8 @@ export default function PaymentBookingDetailPage() {
 
   const pct = useMemo(() => {
     if (!data || !b) return 0;
-    const recv = data.totals.customer_received ?? 0;
-    const total = b.total_cents ?? 0;
-    return total > 0 ? Math.min(100, Math.round((recv / total) * 100)) : 0;
+    const { totalCents, paidCents } = bookingMoneyFromLedger(b.total_cents, data.totals.customer_received ?? 0);
+    return bookingCollectPercent(totalCents, paidCents);
   }, [data, b]);
 
   if (loading) {
@@ -299,8 +299,8 @@ export default function PaymentBookingDetailPage() {
     );
   }
 
-  const recv = data.totals.customer_received ?? 0;
-  const total = b.total_cents ?? 0;
+  const money = bookingMoneyFromLedger(b.total_cents, data.totals.customer_received ?? 0);
+  const { totalCents: total, paidCents: recv, stillDueCents } = money;
 
   return (
     <div className="admin-pay-bk admin-crm-wide">
@@ -329,29 +329,37 @@ export default function PaymentBookingDetailPage() {
             </Link>
           </div>
         </header>
+
+        <div className="admin-money-strip admin-money-strip--lg" aria-label="Booking money summary">
+          <div className="admin-money-strip-stat">
+            <span className="admin-money-strip-label">Total</span>
+            <strong className="admin-money-strip-val">{gbp(money.totalCents)}</strong>
+            <span className="admin-money-strip-hint">From booking contract</span>
+          </div>
+          <div className="admin-money-strip-stat admin-money-strip-stat--ok">
+            <span className="admin-money-strip-label">Paid</span>
+            <strong className="admin-money-strip-val">{gbp(money.paidCents)}</strong>
+            <span className="admin-money-strip-hint">Recorded on this booking</span>
+          </div>
+          <div className="admin-money-strip-stat admin-money-strip-stat--due">
+            <span className="admin-money-strip-label">Still due</span>
+            <strong className="admin-money-strip-val">{gbp(money.stillDueCents)}</strong>
+            <span className="admin-money-strip-hint">Total minus paid</span>
+          </div>
+        </div>
       </div>
 
       <div className="admin-stats-unified-wrap">
-      <div className="admin-pay-bk-stats">
-        <div className="admin-pay-bk-stat admin-pay-bk-stat--in">
-          <span className="admin-pay-bk-stat-label">Client received</span>
-          <span className="admin-pay-bk-stat-val">{gbp(data.totals.customer_received)}</span>
-          <span className="admin-pay-bk-stat-hint">Money in from client</span>
-        </div>
+      <div className="admin-pay-bk-stats admin-pay-bk-stats--secondary">
         <div className="admin-pay-bk-stat admin-pay-bk-stat--out">
           <span className="admin-pay-bk-stat-label">Paid to suppliers</span>
           <span className="admin-pay-bk-stat-val">{gbp(data.totals.vendor_paid_out)}</span>
           <span className="admin-pay-bk-stat-hint">Venue → supplier</span>
         </div>
-        <div className="admin-pay-bk-stat">
-          <span className="admin-pay-bk-stat-label">Booking total</span>
-          <span className="admin-pay-bk-stat-val">{gbp(b.total_cents)}</span>
-          <span className="admin-pay-bk-stat-hint">Agreed price</span>
-        </div>
         <div className="admin-pay-bk-stat admin-pay-bk-stat--pending">
           <span className="admin-pay-bk-stat-label">Outstanding schedule</span>
           <span className="admin-pay-bk-stat-val">{gbp(data.totals.milestone_pending)}</span>
-          <span className="admin-pay-bk-stat-hint">Pending + partial</span>
+          <span className="admin-pay-bk-stat-hint">Pending + partial instalments</span>
         </div>
       </div>
 

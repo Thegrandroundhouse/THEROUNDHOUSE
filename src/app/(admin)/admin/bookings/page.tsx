@@ -559,9 +559,9 @@ export default function BookingsPage() {
         </div>
       ) : (
         <>
-          <div className={`admin-card admin-unified-layout admin-bk-table-simple${listRefreshing ? " admin-bk-table-card--refreshing" : ""}`}>
+          <div className={`admin-card admin-unified-layout admin-bk-table-simple admin-bk-table-money${listRefreshing ? " admin-bk-table-card--refreshing" : ""}`}>
             <div className="admin-pay-table-wrap">
-              <table className="admin-pay-table admin-pay-table--simple">
+              <table className="admin-pay-table admin-pay-table--simple admin-pay-table--money-lg">
                 <thead>
                   <tr>
                     <th>Client</th>

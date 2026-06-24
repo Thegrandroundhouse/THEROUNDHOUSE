@@ -21,16 +21,27 @@ export type WorkspaceTab = "overview" | "wedding" | "payments" | "agreements" | 
 export function BookingWorkspacePanel({
   bookingId,
   overviewSlot,
+  paymentsSlot,
   agreementsSlot,
+  activeTab,
+  onTabChange,
 }: {
   bookingId: string;
   overviewSlot?: React.ReactNode;
+  paymentsSlot?: React.ReactNode;
   agreementsSlot?: React.ReactNode;
+  activeTab?: WorkspaceTab;
+  onTabChange?: (tab: WorkspaceTab) => void;
 }) {
   const { confirm } = useAdminDialog();
   const [ws, setWs] = useState<Workspace | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [tab, setTab] = useState<WorkspaceTab>(overviewSlot ? "overview" : "wedding");
+  const [internalTab, setInternalTab] = useState<WorkspaceTab>(overviewSlot ? "overview" : "agreements");
+  const tab = activeTab ?? internalTab;
+  const setTab = (t: WorkspaceTab) => {
+    onTabChange?.(t);
+    if (activeTab === undefined) setInternalTab(t);
+  };
   const [vendorsList, setVendorsList] = useState<{ id: string; name: string; vendor_type: string }[]>([]);
   const [workspaceFlash, setWorkspaceFlash] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -85,17 +96,17 @@ export function BookingWorkspacePanel({
 
   const TAB_LABELS: Record<WorkspaceTab, string> = {
     overview: "Summary",
+    payments: "Payments",
     wedding: "Event details",
     agreements: "Contract",
-    payments: "Payments",
     tasks: "Tasks",
     vendors: "Vendors",
     docs: "Documents",
     comms: "Messages",
   };
-  const PRIMARY_TABS: WorkspaceTab[] = overviewSlot ? ["overview", "agreements"] : ["agreements"];
-  const MORE_TABS: WorkspaceTab[] = ["wedding", "payments", "tasks", "vendors", "docs", "comms"];
-  const isMoreTab = MORE_TABS.includes(tab);
+  const ALL_TABS: WorkspaceTab[] = overviewSlot
+    ? ["overview", "payments", "agreements", "wedding", "tasks", "vendors", "docs", "comms"]
+    : ["agreements", "payments", "wedding", "tasks", "vendors", "docs", "comms"];
 
   if (err) {
     return (
@@ -118,48 +129,21 @@ export function BookingWorkspacePanel({
 
   const w = ws.wedding || {};
   return (
-    <section className="admin-bws admin-bws--simple" aria-label="Booking workspace">
-      <div className="admin-bws-head">
-        <h2 className="admin-bws-title">Booking</h2>
-      </div>
-      <div className="admin-bws-tabs admin-bws-tabs--simple" role="tablist" aria-label="Main sections">
-        {PRIMARY_TABS.map((t) => (
+    <section className="admin-bws admin-bws--v2" aria-label="Booking workspace">
+      <div className="admin-bws-tabs admin-bws-tabs--v2" role="tablist" aria-label="Booking sections">
+        {ALL_TABS.map((t) => (
           <button
             key={t}
             type="button"
             role="tab"
             aria-selected={tab === t}
-            className={tab === t ? "admin-bws-tab admin-bws-tab--on admin-bws-tab--primary" : "admin-bws-tab admin-bws-tab--primary"}
+            className={tab === t ? "admin-bws-tab admin-bws-tab--on admin-bws-tab--v2" : "admin-bws-tab admin-bws-tab--v2"}
             onClick={() => setTab(t)}
           >
             {TAB_LABELS[t]}
           </button>
         ))}
       </div>
-      <details className="admin-bws-more-tools" open={isMoreTab}>
-        <summary>More tools</summary>
-        <div className="admin-bws-more-tools-grid">
-          {MORE_TABS.map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={tab === t ? "admin-btn admin-btn-primary admin-btn-sm" : "admin-btn admin-btn-ghost admin-btn-sm"}
-              onClick={() => setTab(t)}
-            >
-              {TAB_LABELS[t]}
-            </button>
-          ))}
-        </div>
-      </details>
-      {isMoreTab ? (
-        <p className="admin-bws-viewing" role="status">
-          Viewing: <strong>{TAB_LABELS[tab]}</strong>
-          {" · "}
-          <button type="button" className="admin-link-btn" onClick={() => setTab(overviewSlot ? "overview" : "agreements")}>
-            Back to summary
-          </button>
-        </p>
-      ) : null}
       <div className="admin-bws-body" role="tabpanel">
       {workspaceFlash && (
         <div
@@ -172,6 +156,7 @@ export function BookingWorkspacePanel({
         </div>
       )}
       {tab === "overview" && overviewSlot && <div className="admin-bws-overview">{overviewSlot}</div>}
+      {tab === "payments" && paymentsSlot ? <div className="admin-bws-tab-inner">{paymentsSlot}</div> : null}
       {tab === "wedding" && (
         <div className="admin-bws-tab-inner">
           <p className="admin-bws-lead">Guest count, event space, menu, decor, seating and timeline.</p>
@@ -237,75 +222,6 @@ export function BookingWorkspacePanel({
                 }}
               >
                 Save wedding details
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {tab === "payments" && (
-        <div className="admin-bws-tab-inner">
-          <p className="admin-bws-lead">
-            Hire contract instalments (4×25% by default) — same labels as the contract PDF. Amounts in pounds.
-          </p>
-          <div className="admin-bws-card">
-            <div className="admin-bws-milestones">
-              {(
-                ws.milestones.length > 0
-                  ? ws.milestones
-                  : [
-                      { label: "On Booking Confirmation", amount_cents: null, due_date: null, status: "pending" },
-                      { label: "6 months before function", amount_cents: null, due_date: null, status: "pending" },
-                      { label: "4 months before function", amount_cents: null, due_date: null, status: "pending" },
-                      { label: "2 months before function", amount_cents: null, due_date: null, status: "pending" },
-                    ]
-              ).map((m, i) => (
-                <div key={m.label + i} className="admin-bws-milestone-row">
-                  <div className="admin-form-group admin-bws-milestone-label">
-                    <label>Label</label>
-                    <input
-                      type="text"
-                      defaultValue={m.label}
-                      id={`mil-label-${i}`}
-                    />
-                  </div>
-                  <div className="admin-form-group admin-bws-milestone-amt">
-                    <label>Amount (£)</label>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="0.00"
-                      defaultValue={m.amount_cents != null ? (m.amount_cents / 100).toFixed(2) : ""}
-                      id={`mil-amt-${i}`}
-                    />
-                  </div>
-                  <div className="admin-form-group admin-bws-milestone-due">
-                    <label>Due date</label>
-                    <input type="date" defaultValue={m.due_date?.slice(0, 10) ?? ""} id={`mil-due-${i}`} />
-                  </div>
-                  <input type="hidden" id={`mil-status-${i}`} defaultValue={m.status || "pending"} />
-                </div>
-              ))}
-            </div>
-            <div className="admin-bws-card-actions">
-              <button
-                type="button"
-                className="admin-btn admin-btn-primary"
-                onClick={() => {
-                  const rowCount = document.querySelectorAll(".admin-bws-milestone-row").length;
-                  const milestones = Array.from({ length: rowCount }, (_, i) => {
-                    const amtStr = (document.getElementById(`mil-amt-${i}`) as HTMLInputElement).value.trim();
-                    const amt = amtStr ? Math.round(parseFloat(amtStr.replace(/[^0-9.]/g, "")) * 100) : null;
-                    return {
-                      label: (document.getElementById(`mil-label-${i}`) as HTMLInputElement).value,
-                      amount_cents: amt != null && !Number.isNaN(amt) ? amt : null,
-                      due_date: (document.getElementById(`mil-due-${i}`) as HTMLInputElement).value || null,
-                      status: (document.getElementById(`mil-status-${i}`) as HTMLInputElement).value || "pending",
-                    };
-                  });
-                  patch({ milestones }, "Payment schedule saved.");
-                }}
-              >
-                Save payment schedule
               </button>
             </div>
           </div>

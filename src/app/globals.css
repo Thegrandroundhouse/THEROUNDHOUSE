@@ -5606,6 +5606,56 @@ section.bg-ink p.section-sub,
   max-width: 100%;
   font-weight: 600;
 }
+.admin-bkd-contract-pay-strip {
+  margin-top: 0.85rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface-muted, #faf9f7);
+}
+.admin-bkd-contract-pay-strip-head {
+  margin-bottom: 0.65rem;
+}
+.admin-bkd-contract-pay-strip-title {
+  margin: 0 0 0.2rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.admin-bkd-contract-pay-strip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.65rem;
+}
+.admin-bkd-contract-pay-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.admin-bkd-contract-pay-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+.admin-bkd-contract-pay-readout {
+  font-size: 1.05rem;
+  font-family: var(--font-display);
+}
+.admin-bkd-contract-pay-strip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.admin-bkd-contract-pay-print {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  margin-left: auto;
+}
 .admin-bkd-contract-gen-body {
   padding: 1.1rem 1.15rem;
   border: 1px solid var(--color-border);
@@ -12346,6 +12396,292 @@ section.bg-ink p.section-sub,
   font-weight: 600;
   cursor: pointer;
   text-decoration: underline;
+}
+
+/* Booking detail — flat workspace tabs (v2) */
+.admin-bws--v2 {
+  border-top: none;
+}
+.admin-bws-tabs--v2 {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 0.35rem 0 0.85rem;
+  margin-bottom: 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.admin-bws-tab--v2 {
+  flex-shrink: 0;
+  font-size: 0.92rem;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.admin-bws-tab--v2.admin-bws-tab--on {
+  background: var(--color-gold, #b45309);
+  border-color: var(--color-gold, #b45309);
+  color: #fff;
+}
+
+/* Shared booking money strip — Total / Paid / Still due */
+.admin-money-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+.admin-money-strip--lg {
+  margin-top: 1rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.admin-money-strip--inset {
+  margin-bottom: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 10px);
+  background: var(--color-surface);
+}
+.admin-money-strip-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.admin-money-strip-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+.admin-money-strip-val {
+  font-size: 1.65rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.admin-money-strip-stat--ok .admin-money-strip-val {
+  color: #15803d;
+}
+.admin-money-strip-stat--due .admin-money-strip-val {
+  color: #b45309;
+}
+.admin-money-strip-hint {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+.admin-pay-bk-stats--secondary {
+  grid-template-columns: repeat(2, 1fr);
+}
+.admin-pay-table--money-lg .admin-pay-amt {
+  font-size: 1.1rem;
+}
+.admin-pay-table--money-lg th:nth-child(n + 3):nth-child(-n + 5),
+.admin-pay-table--money-lg td:nth-child(n + 3):nth-child(-n + 5) {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .admin-money-strip {
+    grid-template-columns: 1fr;
+  }
+  .admin-money-strip-val {
+    font-size: 1.45rem;
+  }
+}
+
+/* Booking detail — hero money strip v2 (legacy alias) */
+.admin-bkd-banner-payments--v2 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.admin-bkd-banner-pay-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.admin-bkd-banner-pay-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+.admin-bkd-banner-pay-stat strong {
+  font-size: 1.15rem;
+  font-family: var(--font-display);
+}
+.admin-bkd-banner-pay-stat--ok strong {
+  color: #15803d;
+}
+.admin-bkd-banner-pay-stat--due strong {
+  color: #b45309;
+}
+
+/* Booking payments tab */
+.admin-bkp-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+.admin-bkp-stat {
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface);
+}
+.admin-bkp-stat-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin-bottom: 0.25rem;
+}
+.admin-bkp-stat-val {
+  font-size: 1.2rem;
+  font-family: var(--font-display);
+}
+.admin-bkp-stat--ok .admin-bkp-stat-val {
+  color: #15803d;
+}
+.admin-bkp-stat--due .admin-bkp-stat-val {
+  color: #b45309;
+}
+.admin-bkp-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.08);
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+}
+.admin-bkp-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #15803d, #22c55e);
+  border-radius: 999px;
+}
+.admin-bkp-section {
+  margin-bottom: 1.5rem;
+}
+.admin-bkp-section-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.admin-bkp-section-head {
+  margin-bottom: 0.75rem;
+}
+.admin-bkp-section-desc {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+.admin-bkp-schedule .admin-table-inline-input {
+  width: 100%;
+  min-width: 0;
+}
+.admin-bkp-amt-input {
+  max-width: 6rem;
+}
+.admin-bkp-num {
+  font-weight: 700;
+  color: var(--color-text-muted);
+  width: 2rem;
+}
+.admin-bkp-status {
+  min-width: 7rem;
+  font-size: 0.82rem;
+}
+.admin-bkp-status--paid {
+  border-color: #15803d;
+  color: #15803d;
+}
+.admin-bkp-status--pending {
+  border-color: #b45309;
+  color: #92400e;
+}
+.admin-bkp-row-actions {
+  white-space: nowrap;
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.admin-bkp-empty {
+  padding: 1.25rem;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  text-align: center;
+}
+.admin-bkp-empty p {
+  margin: 0 0 0.75rem;
+  color: var(--color-text-muted);
+}
+.admin-bkp-footnote {
+  margin: 0.75rem 0 0;
+  font-size: 0.88rem;
+}
+
+/* Summary tab quick cards */
+.admin-bks-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+.admin-bks-quick-card {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface);
+}
+.admin-bks-quick-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin-bottom: 0.2rem;
+}
+.admin-bks-quick-card strong {
+  font-size: 1.05rem;
+}
+.admin-bks-quick-card--ok strong {
+  color: #15803d;
+}
+.admin-bks-quick-card--due strong {
+  color: #b45309;
+}
+.admin-bks-hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+.admin-bks-foot {
+  margin: 0.5rem 0 0;
+  font-size: 0.88rem;
+}
+.admin-bks-package-line {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 640px) {
+  .admin-bkd-banner-payments--v2,
+  .admin-bkp-stats {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Create booking — simple mode (older-friendly) */
