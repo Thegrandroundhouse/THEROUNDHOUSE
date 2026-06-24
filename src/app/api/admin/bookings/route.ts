@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { writeAuditLog } from "@/lib/audit-log";
 import { bookingAuditSnapshot } from "@/lib/audit-log-display";
+import { setBookingHalls } from "@/lib/booking-halls";
 import { setupBookingPayments } from "@/lib/booking-payment-setup";
 import { bookingMoneyFromLedger } from "@/lib/booking-money-summary";
 import { reserveUniqueBookingCode } from "@/lib/booking-code";
@@ -247,6 +248,20 @@ export async function POST(request: Request) {
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const spaceIds = Array.isArray(body.space_ids)
+    ? body.space_ids.filter((x: unknown) => typeof x === "string" && x.trim())
+    : typeof body.space_id === "string" && body.space_id.trim()
+      ? [body.space_id.trim()]
+      : [];
+  if (spaceIds.length) {
+    try {
+      await setBookingHalls(supabase, data.id, spaceIds);
+    } catch (hallErr) {
+      console.error("setBookingHalls:", hallErr);
+    }
+  }
+
   if (body.enquiry_id) {
     await supabase
       .from("enquiries")

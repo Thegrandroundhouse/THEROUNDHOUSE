@@ -8,11 +8,12 @@ import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import type { InvoiceBusinessPayload } from "@/app/api/admin/settings/invoice-business/route";
 import { DEFAULT_BOOKING_SLOTS } from "@/lib/booking-slots";
 import { VENUE_ADDRESS } from "@/lib/venue-constants";
+import { HallsSettingsTab } from "@/components/admin/HallsSettingsTab";
 import { HireContractSettingsTab } from "@/components/admin/HireContractSettingsTab";
 import type { HireContractSettingsPayload } from "@/lib/hire-contract-settings";
 import { HIRE_CONTRACT_SETTINGS_DEFAULTS } from "@/lib/hire-contract-settings";
 
-type SettingsTab = "logo" | "business" | "contract" | "slots" | "guide";
+type SettingsTab = "logo" | "business" | "contract" | "slots" | "halls" | "guide";
 
 type SlotRow = { key: string; label: string; timeLabel: string };
 
@@ -44,6 +45,12 @@ const TAB_META: Record<
     kicker: "Scheduling",
     feeds: "Contact form, new booking, calendar capacity, and package slot rules.",
   },
+  halls: {
+    label: "Halls & rooms",
+    short: "Halls",
+    kicker: "Venue layout",
+    feeds: "Calendar blocking, bookings, enquiries, and contract hall names.",
+  },
   guide: {
     label: "User guide (PDF)",
     short: "Guide",
@@ -52,7 +59,7 @@ const TAB_META: Record<
   },
 };
 
-const TABS: SettingsTab[] = ["logo", "business", "contract", "slots", "guide"];
+const TABS: SettingsTab[] = ["logo", "business", "contract", "slots", "halls", "guide"];
 
 function SettingsInput({
   id,
@@ -172,7 +179,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const t = searchParams.get("tab");
-    if (t === "guide" || t === "logo" || t === "business" || t === "contract" || t === "slots") {
+    if (t === "guide" || t === "logo" || t === "business" || t === "contract" || t === "slots" || t === "halls") {
       setTabState(t);
     }
   }, [searchParams]);
@@ -711,6 +718,16 @@ export default function SettingsPage() {
                     </button>
                   </footer>
                 </form>
+              </section>
+            )}
+
+            {tab === "halls" && (
+              <section className="admin-card admin-settings-v2-card">
+                <header className="admin-settings-v2-section-head">
+                  <p className="admin-settings-v2-kicker">{TAB_META.halls.kicker}</p>
+                  <h2 className="admin-card-heading">{TAB_META.halls.label}</h2>
+                </header>
+                <HallsSettingsTab />
               </section>
             )}
 

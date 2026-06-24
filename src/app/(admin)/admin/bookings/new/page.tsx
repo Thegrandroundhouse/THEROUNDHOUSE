@@ -80,6 +80,8 @@ function NewBookingForm() {
   const [wholeDayAvailable, setWholeDayAvailable] = useState(false);
   const [wholeDay, setWholeDay] = useState(false);
   const [eventSlotKey, setEventSlotKey] = useState("");
+  const [halls, setHalls] = useState<{ id: string; name: string }[]>([]);
+  const [selectedHallIds, setSelectedHallIds] = useState<string[]>([]);
   const prefillSlotKey = useRef<string | null>(null);
 
   const slotsMultiMode = slotConfig.enabled && slotConfig.slots.length > 0;
@@ -103,6 +105,13 @@ function NewBookingForm() {
     notes: "",
     enquiry_id: "",
   });
+
+  useEffect(() => {
+    adminFetch("/api/admin/spaces")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setHalls(Array.isArray(d) ? d.map((h: { id: string; name: string }) => ({ id: h.id, name: h.name })) : []))
+      .catch(() => setHalls([]));
+  }, []);
 
   useEffect(() => {
     adminFetch("/api/admin/settings/booking-slots")
@@ -401,6 +410,7 @@ function NewBookingForm() {
           special_requirements: form.special_requirements || null,
           notes: form.notes || null,
           enquiry_id: form.enquiry_id || null,
+          space_ids: selectedHallIds.length ? selectedHallIds : undefined,
       };
       if (slotsMultiMode) {
         if (wholeDay) {
@@ -489,6 +499,51 @@ function NewBookingForm() {
             </div>
           </div>
         </section>
+
+        {halls.length > 0 ? (
+          <section className="admin-card admin-bk-simple-card">
+            <h2 className="admin-section-title">Which hall(s)?</h2>
+            <p className="admin-bkd-quick-lead" style={{ marginBottom: "0.75rem" }}>
+              Pick one hall, both, or leave blank for whole venue. Manage names in{" "}
+              <Link href="/admin/settings?tab=halls" className="admin-link">
+                Settings → Halls
+              </Link>
+              .
+            </p>
+            <div className="admin-bkd-statuses">
+              {halls.map((h) => {
+                const on = selectedHallIds.includes(h.id);
+                return (
+                  <button
+                    key={h.id}
+                    type="button"
+                    className={on ? "admin-bkd-status admin-bkd-status--on" : "admin-bkd-status"}
+                    onClick={() =>
+                      setSelectedHallIds((prev) =>
+                        on ? prev.filter((id) => id !== h.id) : [...prev, h.id],
+                      )
+                    }
+                  >
+                    {h.name}
+                  </button>
+                );
+              })}
+              {halls.length > 1 ? (
+                <button
+                  type="button"
+                  className={
+                    selectedHallIds.length === halls.length
+                      ? "admin-bkd-status admin-bkd-status--on"
+                      : "admin-bkd-status"
+                  }
+                  onClick={() => setSelectedHallIds(halls.map((h) => h.id))}
+                >
+                  Both halls
+                </button>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
 
         <section className="admin-card admin-bk-simple-card">
           <h2 className="admin-section-title">Event date &amp; slot</h2>

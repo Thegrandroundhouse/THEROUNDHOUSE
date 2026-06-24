@@ -1,4 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  getBookingHallIds,
+  hallNamesLabel,
+  listVenueHalls,
+} from "@/lib/booking-halls";
 import type { InvoiceBusinessPayload } from "@/app/api/admin/settings/invoice-business/route";
 import { getBookingSlotsConfig } from "@/lib/booking-slots";
 import {
@@ -293,6 +298,14 @@ export async function buildBanquetingContract(
 
   const legalName = business?.venueName?.trim() || VENUE_LEGAL_NAME;
 
+  const [hallIds, venueHalls] = await Promise.all([
+    getBookingHallIds(supabase, bookingId),
+    listVenueHalls(supabase),
+  ]);
+  const hallLabel = hallNamesLabel(venueHalls, hallIds);
+  const defaultSuites =
+    hallIds.length > 0 ? hallLabel : String(booking.package_name || times.slotLabel);
+
   const sections: RoundhouseContractSections = {
     includes: hireSettings.sectionDefaults.includes,
     table_linen_note: hireSettings.sectionDefaults.table_linen_note,
@@ -360,7 +373,7 @@ export async function buildBanquetingContract(
       accessFrom: overrides.accessFrom || times.accessFrom,
       startTime: overrides.startTime || times.startTime,
       endTime: overrides.endTime || times.endTime,
-      suites: overrides.suites || String(booking.package_name || times.slotLabel),
+      suites: overrides.suites || defaultSuites,
       exclusivity: overrides.exclusivity || "Non Exclusive",
       guestCount,
     },

@@ -21,8 +21,10 @@ export function GrandEnquiryForm({ selectedDate = "", onDateClear, onDatePicked 
     phone: "",
     date: selectedDate,
     event_slot_key: "",
+    preferred_space_ids: [] as string[],
     message: "",
   });
+  const [halls, setHalls] = useState<{ id: string; name: string }[]>([]);
   const [slotsState, setSlotsState] = useState<{
     enabled: boolean;
     slots: SlotRow[];
@@ -43,6 +45,13 @@ export function GrandEnquiryForm({ selectedDate = "", onDateClear, onDatePicked 
   useEffect(() => {
     if (selectedDate) setForm((f) => ({ ...f, date: selectedDate }));
   }, [selectedDate]);
+
+  useEffect(() => {
+    fetch("/api/halls")
+      .then((r) => r.json())
+      .then((d) => setHalls(Array.isArray(d) ? d : []))
+      .catch(() => setHalls([]));
+  }, []);
 
   useEffect(() => {
     if (!dateValue || !/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
@@ -157,7 +166,7 @@ export function GrandEnquiryForm({ selectedDate = "", onDateClear, onDatePicked 
         return;
       }
       setStatus("success");
-      setForm({ typeOfFunction: "", whereDidYouHear: "", name: "", email: "", phone: "", date: "", event_slot_key: "", message: "" });
+      setForm({ typeOfFunction: "", whereDidYouHear: "", name: "", email: "", phone: "", date: "", event_slot_key: "", preferred_space_ids: [], message: "" });
       onDateClear?.();
     } catch {
       setStatus("error");
@@ -203,6 +212,43 @@ export function GrandEnquiryForm({ selectedDate = "", onDateClear, onDatePicked 
         <label htmlFor="phone" className="block text-sm font-medium text-charcoal">Phone *</label>
         <input id="phone" type="tel" required value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className={inputClass} />
       </div>
+      {halls.length > 0 ? (
+        <div>
+          <span className="block text-sm font-medium text-charcoal">Preferred hall(s)</span>
+          <p className="mt-1 text-xs text-charcoal/60">Select one hall, both, or leave blank if unsure.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {halls.map((h) => {
+              const on = form.preferred_space_ids.includes(h.id);
+              return (
+                <button
+                  key={h.id}
+                  type="button"
+                  className={`rounded-full border px-3 py-1.5 text-sm ${on ? "border-gold bg-gold/15 text-charcoal" : "border-charcoal/15 bg-white text-charcoal/80"}`}
+                  onClick={() =>
+                    setForm((f) => ({
+                      ...f,
+                      preferred_space_ids: on
+                        ? f.preferred_space_ids.filter((id) => id !== h.id)
+                        : [...f.preferred_space_ids, h.id],
+                    }))
+                  }
+                >
+                  {h.name}
+                </button>
+              );
+            })}
+            {halls.length > 1 ? (
+              <button
+                type="button"
+                className="rounded-full border border-charcoal/15 px-3 py-1.5 text-sm text-charcoal/80"
+                onClick={() => setForm((f) => ({ ...f, preferred_space_ids: halls.map((h) => h.id) }))}
+              >
+                Both halls
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <div>
         <label htmlFor="date" className="block text-sm font-medium text-charcoal">Preferred date</label>
         <p className="mt-1 text-xs text-charcoal/60">Pick a date from the calendar or enter below.</p>

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { monthBoundsLocal } from "@/lib/local-date";
 import { computeFullyBookedDates, getBookingSlotsConfig } from "@/lib/booking-slots";
 
 function getAdminClient() {
@@ -21,10 +22,7 @@ export async function GET(request: NextRequest) {
   const supabase = getAdminClient();
   if (!supabase) return NextResponse.json({ bookedDates: [], partialDates: [] as string[] });
 
-  const start = new Date(y, m, 1);
-  const end = new Date(y, m + 1, 0);
-  const startStr = start.toISOString().slice(0, 10);
-  const endStr = end.toISOString().slice(0, 10);
+  const { start: startStr, end: endStr } = monthBoundsLocal(y, m);
 
   const config = await getBookingSlotsConfig(supabase);
 

@@ -48,6 +48,9 @@ export async function POST(request: Request) {
     message: body.message != null && String(body.message).trim() ? String(body.message).trim() : null,
     event_date: dateStr,
     event_slot_key: dateStr ? event_slot_key : null,
+    preferred_space_ids: Array.isArray(body.preferred_space_ids)
+      ? body.preferred_space_ids.filter((x: unknown) => typeof x === "string" && x.trim())
+      : null,
   };
 
   let { error } = await supabase.from("enquiries").insert(row);

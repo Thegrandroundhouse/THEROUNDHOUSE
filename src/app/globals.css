@@ -14877,9 +14877,21 @@ section.bg-ink p.section-sub,
 .admin-audit-detail-dl--records div:last-child {
   border-bottom: none;
 }
-.admin-audit-deleted-note {
+.admin-settings-halls-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.admin-settings-halls-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+.admin-settings-halls-cap {
   font-size: 0.875rem;
-  font-style: italic;
+  color: var(--color-text-muted, #666);
 }
 .admin-audit-detail-pill {
   display: inline-block;

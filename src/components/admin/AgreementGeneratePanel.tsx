@@ -725,7 +725,7 @@ export function AgreementGeneratePanel({
               />
             </div>
             <div className="admin-form-group">
-              <label>Suite / room</label>
+              <label>Hall / suite</label>
               <input
                 value={draft.event.suites}
                 onChange={(e) => setDraft((d) => (d ? { ...d, event: { ...d.event, suites: e.target.value } } : d))}

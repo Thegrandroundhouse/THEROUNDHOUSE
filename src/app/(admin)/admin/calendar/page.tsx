@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import { AdminStatsCards } from "@/components/admin/AdminStatsCards";
+import { formatLocalDateParts, todayLocalDateString } from "@/lib/local-date";
+import { manualBlockedDatesForFilter, type VenueHall } from "@/lib/booking-halls";
 
 const MONTHS = "January February March April May June July August September October November December".split(" ");
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -19,11 +21,14 @@ type BookingItem = {
   event_type?: string | null;
   event_slot_key?: string | null;
   event_slot_label?: string;
+  hall_ids?: string[];
+  hall_label?: string;
 };
 type BookingsByDate = Record<string, BookingItem[]>;
+type ManualBlock = { date: string; space_id: string | null };
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocalDateString();
 }
 
 type PublicSlotDay = {
@@ -54,7 +59,10 @@ function CalendarPageInner() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
   const [bookingsByDate, setBookingsByDate] = useState<BookingsByDate>({});
-  const [manualBlocked, setManualBlocked] = useState<Set<string>>(new Set());
+  const [manualBlocks, setManualBlocks] = useState<ManualBlock[]>([]);
+  const [halls, setHalls] = useState<VenueHall[]>([]);
+  /** all = combined view; hall uuid = one hall; whole = whole-venue blocks only */
+  const [hallFilter, setHallFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -133,10 +141,12 @@ function CalendarPageInner() {
       if (!res.ok) throw new Error(await parseAdminError(res, "Couldn’t load calendar"));
       const data = await res.json();
       setBookingsByDate(data.bookingsByDate ?? {});
-      setManualBlocked(new Set(data.manualBlockedDates ?? []));
+      setManualBlocks(data.manualBlocks ?? []);
+      setHalls(data.halls ?? []);
     } catch (err) {
       setBookingsByDate({});
-      setManualBlocked(new Set());
+      setManualBlocks([]);
+      setHalls([]);
       setLoadError(err instanceof Error ? err.message : "Couldn’t load calendar");
     } finally {
       setLoading(false);
@@ -152,20 +162,35 @@ function CalendarPageInner() {
   const startDow = first.getDay();
   const days: { d: number; dateStr: string }[] = [];
   for (let d = 1; d <= lastDay; d++) {
-    days.push({ d, dateStr: new Date(year, month, d).toISOString().slice(0, 10) });
+    days.push({ d, dateStr: formatLocalDateParts(year, month, d) });
   }
+
+  const allHallIds = halls.map((h) => h.id);
+  const manualBlocked = useMemo(
+    () => manualBlockedDatesForFilter(manualBlocks, hallFilter as string, allHallIds),
+    [manualBlocks, hallFilter, allHallIds],
+  );
+
+  const blockSpaceId = hallFilter === "all" ? null : hallFilter === "whole" ? null : hallFilter;
 
   const filteredByDate = useMemo(() => {
     const out: BookingsByDate = {};
     for (const [d, arr] of Object.entries(bookingsByDate)) {
-      const f =
+      let list =
         bookingStatusView === "all"
           ? arr
           : arr.filter((b) => b.status !== "cancelled");
-      if (f.length) out[d] = f;
+      if (hallFilter !== "all" && hallFilter !== "whole") {
+        list = list.filter(
+          (b) =>
+            !b.hall_ids?.length ||
+            b.hall_ids.includes(hallFilter),
+        );
+      }
+      if (list.length) out[d] = list;
     }
     return out;
-  }, [bookingsByDate, bookingStatusView]);
+  }, [bookingsByDate, bookingStatusView, hallFilter]);
 
   const stats = useMemo(() => {
     let bookedDays = 0;
@@ -184,6 +209,21 @@ function CalendarPageInner() {
     return { bookedDays, closedOnly, free, total: days.length, totalBookingsCount };
   }, [days, filteredByDate, manualBlocked]);
 
+  const blockTargetLabel =
+    hallFilter === "all"
+      ? "whole venue (all halls)"
+      : hallFilter === "whole"
+        ? "whole venue"
+        : halls.find((h) => h.id === hallFilter)?.name || "this hall";
+
+  async function postCalendarDay(body: Record<string, unknown>) {
+    return adminFetch("/api/admin/calendar-day", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, space_id: blockSpaceId }),
+    });
+  }
+
   const goToday = () => {
     const t = new Date();
     setYear(t.getFullYear());
@@ -197,24 +237,16 @@ function CalendarPageInner() {
       return;
     }
     if (manualOnly) {
-      if (!(await confirm(`Open ${dateStr} for enquiries again?`, { title: "Open day" }))) return;
-      const res = await adminFetch("/api/admin/calendar-day", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: dateStr, action: "unblock" }),
-      });
+      if (!(await confirm(`Open ${dateStr} for ${blockTargetLabel}?`, { title: "Open day" }))) return;
+      const res = await postCalendarDay({ date: dateStr, action: "unblock" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         await alert(d.error || "Could not unblock");
         return;
       }
     } else {
-      if (!(await confirm(`Mark ${dateStr} as unavailable on the public calendar?`, { title: "Close day", confirmLabel: "Close day" }))) return;
-      const res = await adminFetch("/api/admin/calendar-day", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: dateStr, action: "block" }),
-      });
+      if (!(await confirm(`Mark ${dateStr} unavailable for ${blockTargetLabel}?`, { title: "Close day", confirmLabel: "Close day" }))) return;
+      const res = await postCalendarDay({ date: dateStr, action: "block" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         await alert(d.error || "Could not block");
@@ -233,14 +265,10 @@ function CalendarPageInner() {
       await alert("End date must be on or after start date.");
       return;
     }
-    if (!(await confirm(`Mark every day from ${selected} through ${rangeEnd} as unavailable? Days with bookings are skipped.`, { title: "Close range", confirmLabel: "Close" }))) return;
+    if (!(await confirm(`Mark every day from ${selected} through ${rangeEnd} unavailable for ${blockTargetLabel}? Days with bookings are skipped.`, { title: "Close range", confirmLabel: "Close" }))) return;
     setRangeBusy(true);
     try {
-      const res = await adminFetch("/api/admin/calendar-day", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: selected, endDate: rangeEnd, action: "block" }),
-      });
+      const res = await postCalendarDay({ date: selected, endDate: rangeEnd, action: "block" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         await alert(data.error || "Range block failed");
@@ -260,14 +288,10 @@ function CalendarPageInner() {
       return;
     }
     if (selected > rangeEnd) return;
-    if (!(await confirm(`Remove manual closes from ${selected} through ${rangeEnd}?`, { title: "Open range", confirmLabel: "Open range" }))) return;
+    if (!(await confirm(`Remove manual closes from ${selected} through ${rangeEnd} for ${blockTargetLabel}?`, { title: "Open range", confirmLabel: "Open range" }))) return;
     setRangeBusy(true);
     try {
-      const res = await adminFetch("/api/admin/calendar-day", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: selected, endDate: rangeEnd, action: "unblock" }),
-      });
+      const res = await postCalendarDay({ date: selected, endDate: rangeEnd, action: "unblock" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         await alert(d.error || "Failed");
@@ -405,7 +429,21 @@ function CalendarPageInner() {
       <div className="admin-cal-pair-section">
         <section className="admin-cal-grid-toolbar" aria-label="Calendar grid display">
           <div className="admin-cal-grid-toolbar-inner">
-            <span className="admin-crm-filters-inline-label">Grid</span>
+            <span className="admin-crm-filters-inline-label">Hall</span>
+            <select
+              className="admin-cal-select"
+              value={hallFilter}
+              onChange={(e) => setHallFilter(e.target.value)}
+              aria-label="Filter by hall"
+            >
+              <option value="all">All halls (combined)</option>
+              {halls.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name}
+                </option>
+              ))}
+            </select>
+            <span className="admin-crm-filters-inline-label">Bookings</span>
             <div className="admin-crm-filters-seg" role="group">
               <button
                 type="button"
@@ -424,7 +462,7 @@ function CalendarPageInner() {
             </div>
           </div>
           <p className="admin-cal-grid-toolbar-hint">
-            “Active” hides cancelled from the grid only; the day panel still lists all bookings for that date.
+            Pick a hall to block or view one room at a time. “All halls” closes the whole venue. Unavailable = manually closed; booked = has a reservation.
           </p>
         </section>
         <div className="admin-cal-layout admin-cal-layout--calendar-pair">
@@ -645,6 +683,11 @@ function CalendarPageInner() {
                           <span className="admin-cal-sidebar-booking-time" style={{ flexBasis: "100%", marginTop: "0.2rem" }}>
                             {activeBooking.event_slot_label || "Full venue (whole day)"}
                           </span>
+                          {activeBooking.hall_label ? (
+                            <span className="admin-cal-sidebar-booking-time" style={{ flexBasis: "100%", opacity: 0.85 }}>
+                              {activeBooking.hall_label}
+                            </span>
+                          ) : null}
                         </span>
                       </div>
                       <Link href={`/admin/bookings/${activeBooking.id}`} className="admin-btn admin-btn-sm admin-btn-primary admin-cal-sidebar-viewbtn">
@@ -720,6 +763,7 @@ function CalendarPageInner() {
                   <span className="admin-cal-agenda-date">{b.dateStr}</span>
                   <span>
                     {b.client_name || b.client_email}
+                    {b.hall_label ? <span className="admin-cal-agenda-slot"> · {b.hall_label}</span> : null}
                     {b.event_slot_label ? <span className="admin-cal-agenda-slot"> · {b.event_slot_label}</span> : null}
                   </span>
                   <span className="admin-cal-agenda-status">{b.status}</span>
