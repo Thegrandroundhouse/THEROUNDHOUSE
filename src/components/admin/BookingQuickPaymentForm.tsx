@@ -32,37 +32,14 @@ export function BookingQuickPaymentForm({
 }) {
   const { alert } = useAdminDialog();
   const [amountPounds, setAmountPounds] = useState("");
-  const [label, setLabel] = useState("Deposit");
   const [notes, setNotes] = useState("");
-  const [syncMilestones, setSyncMilestones] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  const fillDeposit = () => {
-    if (depositCents && depositCents > 0) {
-      setAmountPounds(centsToPounds(depositCents));
-      setLabel("Deposit");
-    }
-  };
-
-  const fillInstalment = () => {
-    if (instalmentCents && instalmentCents > 0) {
-      setAmountPounds(centsToPounds(instalmentCents));
-      setLabel("On booking confirmation (25%)");
-    }
-  };
-
-  const fillTotal = () => {
-    if (totalCents && totalCents > 0) {
-      setAmountPounds(centsToPounds(totalCents));
-      setLabel("Full hall hire");
-    }
-  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount_cents = poundsToCents(amountPounds);
     if (!amount_cents) {
-      await alert("Enter a valid amount in pounds.");
+      await alert("Enter how much they paid, in pounds.");
       return;
     }
     setSaving(true);
@@ -72,16 +49,16 @@ export function BookingQuickPaymentForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount_cents,
-          label: label.trim() || "Payment",
+          label: "Payment",
           notes: notes.trim() || null,
-          sync_milestones: syncMilestones,
+          sync_milestones: true,
         }),
       });
       if (!r.ok) throw new Error(await parseAdminError(r, "Couldn’t record payment"));
       setAmountPounds("");
       setNotes("");
       onRecorded();
-      await alert(`Recorded ${label} — £${(amount_cents / 100).toFixed(2)}`);
+      await alert(`Recorded £${(amount_cents / 100).toFixed(2)}`);
     } catch (err) {
       await alert(err instanceof Error ? err.message : "Couldn’t record payment");
     } finally {
@@ -90,61 +67,45 @@ export function BookingQuickPaymentForm({
   };
 
   return (
-    <form className="admin-bko-quick-pay" onSubmit={submit}>
-      <p className="admin-bko-card-meta" style={{ marginTop: 0 }}>
-        Record money received — updates the ledger. With the checkbox on, hire-contract instalments (4×25%) are
-        created if needed and marked paid in order.
-      </p>
-      <div className="admin-bko-quick-pay-row">
-        <div className="admin-form-group">
-          <label>Amount (£)</label>
+    <form className="admin-bko-quick-pay admin-bko-quick-pay--simple" onSubmit={submit}>
+      <div className="admin-bko-quick-pay-row admin-bko-quick-pay-row--simple">
+        <div className="admin-form-group admin-bko-simple-field">
+          <label>How much did they pay? (£)</label>
           <input
             type="text"
             inputMode="decimal"
+            className="admin-bko-simple-input"
             value={amountPounds}
             onChange={(e) => setAmountPounds(e.target.value)}
-            placeholder="0.00"
+            placeholder="e.g. 500.00"
           />
         </div>
-        <div className="admin-form-group">
-          <label>Label</label>
-          <select value={label} onChange={(e) => setLabel(e.target.value)}>
-            <option value="Deposit">Deposit</option>
-            <option value="On booking confirmation (25%)">On booking confirmation (25%)</option>
-            <option value="Instalment">Instalment</option>
-            <option value="Full hall hire">Full hall hire</option>
-            <option value="Balance">Balance</option>
-            <option value="Payment">Other payment</option>
-          </select>
+      </div>
+      {(depositCents && depositCents > 0) || (instalmentCents && instalmentCents > 0) || (totalCents && totalCents > 0) ? (
+        <div className="admin-bko-quick-pay-actions">
+          {depositCents && depositCents > 0 ? (
+            <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" onClick={() => setAmountPounds(centsToPounds(depositCents))}>
+              Deposit ({centsToPounds(depositCents)})
+            </button>
+          ) : null}
+          {instalmentCents && instalmentCents > 0 ? (
+            <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" onClick={() => setAmountPounds(centsToPounds(instalmentCents))}>
+              25% ({centsToPounds(instalmentCents)})
+            </button>
+          ) : null}
+          {totalCents && totalCents > 0 ? (
+            <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" onClick={() => setAmountPounds(centsToPounds(totalCents))}>
+              Full amount ({centsToPounds(totalCents)})
+            </button>
+          ) : null}
         </div>
-      </div>
-      <div className="admin-bko-quick-pay-actions">
-        {depositCents && depositCents > 0 ? (
-          <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" onClick={fillDeposit}>
-            Use deposit ({centsToPounds(depositCents)})
-          </button>
-        ) : null}
-        {instalmentCents && instalmentCents > 0 ? (
-          <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" onClick={fillInstalment}>
-            Use 25% instalment ({centsToPounds(instalmentCents)})
-          </button>
-        ) : null}
-        {totalCents && totalCents > 0 ? (
-          <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" onClick={fillTotal}>
-            Use full total ({centsToPounds(totalCents)})
-          </button>
-        ) : null}
-      </div>
-      <label className="admin-hire-settings-item-check admin-bko-quick-pay-check">
-        <input type="checkbox" checked={syncMilestones} onChange={(e) => setSyncMilestones(e.target.checked)} />
-        <span>Mark hire contract instalments as paid (creates 4×25% schedule if missing)</span>
-      </label>
+      ) : null}
       <div className="admin-form-group admin-form-full" style={{ marginTop: "0.5rem" }}>
-        <label>Notes (optional)</label>
-        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Bank transfer ref, cash, etc." />
+        <label>Note (optional)</label>
+        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Cash, bank transfer, etc." />
       </div>
-      <button type="submit" className="admin-btn admin-btn-primary admin-btn-sm" disabled={saving} style={{ marginTop: "0.65rem" }}>
-        {saving ? "Recording…" : "Record payment"}
+      <button type="submit" className="admin-btn admin-btn-primary admin-bko-simple-submit" disabled={saving}>
+        {saving ? "Saving…" : "Record payment"}
       </button>
     </form>
   );

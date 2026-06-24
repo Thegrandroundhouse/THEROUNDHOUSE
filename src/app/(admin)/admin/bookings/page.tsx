@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import Link from "next/link";
@@ -37,6 +37,8 @@ const STATUS_LABELS: Record<BookingStatus, string> = {
   completed: "Completed",
 };
 
+type BookingRow = Booking & { paid_cents?: number; due_cents?: number | null };
+
 const STATUS_ORDER: BookingStatus[] = ["pending", "confirmed", "completed", "cancelled"];
 
 function formatPounds(cents: number | null) {
@@ -69,7 +71,7 @@ function exportFileSlug(mode: ExportDateMode, year: string, from: string, to: st
 export default function BookingsPage() {
   const { alert, confirm } = useAdminDialog();
   const searchParams = useSearchParams();
-  const [list, setList] = useState<Booking[]>([]);
+  const [list, setList] = useState<BookingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [listRefreshing, setListRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -179,8 +181,6 @@ export default function BookingsPage() {
       });
   }, [page, limit, statusFilter, dateFilter, debouncedQ, retryKey]);
 
-  const pageValue = useMemo(() => list.reduce((s, b) => s + (b.total_cents || 0), 0), [list]);
-
   if (loading && !hydratedRef.current) {
     return (
       <div className="admin-bk">
@@ -219,19 +219,24 @@ export default function BookingsPage() {
             <p className="admin-dash-kicker">Venue</p>
             <h1 className="admin-page-title admin-bk-title">Bookings</h1>
             <p className="admin-lead admin-bk-lead">
-              Every reservation in one place — client, date, package, deposits, and status. View a row for full detail and notes.
+              Find a booking, open it, record payments, or create a new one.
             </p>
           </div>
           <div className="admin-bk-hero-actions">
-            <button type="button" className="admin-btn admin-btn-ghost" onClick={() => setExportOpen(true)}>
-              Export PDF / CSV…
-            </button>
-            <Link href="/admin/calendar" className="admin-btn admin-btn-ghost">
-              Calendar
-            </Link>
-            <Link href="/admin/bookings/new" className="admin-btn admin-btn-primary">
+            <Link href="/admin/bookings/new" className="admin-btn admin-btn-primary admin-bk-new-btn">
               + New booking
             </Link>
+            <details className="admin-bk-more-actions">
+              <summary className="admin-btn admin-btn-ghost">More</summary>
+              <div className="admin-bk-more-actions-menu">
+                <button type="button" className="admin-btn admin-btn-ghost" onClick={() => setExportOpen(true)}>
+                  Export list
+                </button>
+                <Link href="/admin/calendar" className="admin-btn admin-btn-ghost">
+                  Calendar
+                </Link>
+              </div>
+            </details>
           </div>
         </header>
       </div>
@@ -457,10 +462,8 @@ export default function BookingsPage() {
         <AdminStatsCards
           ariaLabel="Booking summary"
           items={[
-            { label: "Total bookings", value: totalBookings, hint: statusFilter === "all" ? "All statuses" : STATUS_LABELS[statusFilter] },
-            { label: "Pending", value: summary.pending, hint: "Venue-wide", variant: "accent" },
-            { label: "Confirmed", value: summary.confirmed, hint: "Venue-wide", variant: "ok" },
-            { label: "This month", value: summary.upcomingThisMonth, hint: `Page value ${formatPounds(pageValue)}` },
+            { label: "Bookings", value: totalBookings, hint: statusFilter === "all" ? "All" : STATUS_LABELS[statusFilter] },
+            { label: "This month", value: summary.upcomingThisMonth, hint: "Upcoming events", variant: "gold" },
           ]}
         />
       </div>
@@ -524,7 +527,7 @@ export default function BookingsPage() {
               setPage(1);
             }}
             id="bk-date-filter"
-            label="Event date"
+            label="Date"
           />
           <label className="admin-crm-filters-date-label admin-bk-filters-search-label">
             <span>Search</span>
@@ -556,19 +559,16 @@ export default function BookingsPage() {
         </div>
       ) : (
         <>
-          <div className={`admin-card admin-unified-layout${listRefreshing ? " admin-bk-table-card--refreshing" : ""}`}>
-            <h2 className="admin-section-title">Table view</h2>
+          <div className={`admin-card admin-unified-layout admin-bk-table-simple${listRefreshing ? " admin-bk-table-card--refreshing" : ""}`}>
             <div className="admin-pay-table-wrap">
-              <table className="admin-pay-table">
+              <table className="admin-pay-table admin-pay-table--simple">
                 <thead>
                   <tr>
-                    <th>Code</th>
                     <th>Client</th>
-                    <th>Phone</th>
                     <th>Event date</th>
-                    <th>Package</th>
                     <th>Total</th>
-                    <th>Deposit</th>
+                    <th>Paid</th>
+                    <th>Still due</th>
                     <th>Status</th>
                     <th></th>
                   </tr>
@@ -577,20 +577,16 @@ export default function BookingsPage() {
                   {list.map((b) => (
                     <tr key={b.id}>
                       <td>
-                        <strong className="admin-inv-num">{b.booking_code || "—"}</strong>
-                        <span className="admin-inv-date">{new Date(b.event_date + "T12:00:00").toLocaleDateString(undefined, { dateStyle: "short" })}</span>
-                      </td>
-                      <td>
                         <span className="admin-pay-client">{b.client_name || "—"}</span>
                         <span className="admin-pay-sub">{b.client_email}</span>
+                        {b.client_phone ? <span className="admin-pay-sub">{b.client_phone}</span> : null}
                       </td>
-                      <td className="admin-table-phone">
-                        {b.client_phone ? <a href={`tel:${b.client_phone}`}>{b.client_phone}</a> : "—"}
-                      </td>
-                      <td>{new Date(b.event_date + "T12:00:00").toLocaleDateString(undefined, { dateStyle: "medium" })}</td>
-                      <td>{b.package_name || "—"}</td>
+                      <td>{new Date(b.event_date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</td>
                       <td className="admin-pay-amt">{formatPounds(b.total_cents)}</td>
-                      <td>{formatPounds(b.deposit_cents)}</td>
+                      <td className="admin-pay-amt admin-pay-amt--ok">{formatPounds(b.paid_cents ?? 0)}</td>
+                      <td className={`admin-pay-amt${(b.due_cents ?? 0) > 0 ? " admin-pay-amt--due" : ""}`}>
+                        {b.due_cents != null ? formatPounds(b.due_cents) : "—"}
+                      </td>
                       <td>
                         <select
                           className="admin-table-select"
@@ -607,7 +603,7 @@ export default function BookingsPage() {
                       </td>
                       <td>
                         <Link href={`/admin/bookings/${b.id}`} className="admin-btn admin-btn-sm admin-btn-primary">
-                          View
+                          Open
                         </Link>
                       </td>
                     </tr>

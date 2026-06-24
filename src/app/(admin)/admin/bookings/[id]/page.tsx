@@ -739,20 +739,36 @@ export default function BookingDetailPage() {
       <div className="admin-bkd-banner">
         <div className="admin-bkd-top-actions">
           <Link href="/admin/bookings" className="admin-bkd-back">
-            ← Bookings
+            ← All bookings
           </Link>
           <button type="button" className="admin-btn admin-btn-primary" onClick={openBookingQuickEdit}>
-            Edit details
+            Edit booking
           </button>
-          <button type="button" className="admin-btn admin-btn-danger admin-btn-ghost" onClick={handleDelete}>
-            Delete booking
+          <button
+            type="button"
+            className="admin-btn admin-btn-ghost"
+            onClick={() => {
+              const contractTab = document.querySelector<HTMLButtonElement>(".admin-bws-tab--primary:nth-child(2)");
+              contractTab?.click();
+              document.querySelector(".admin-bws")?.scrollIntoView({ behavior: "smooth" });
+            }}
+          >
+            Contract
           </button>
-          <button type="button" className="admin-btn admin-btn-ghost admin-bkd-export-btn" onClick={() => setReminderOpen(true)}>
-            Set reminder
-          </button>
-          <button type="button" className="admin-btn admin-btn-ghost admin-bkd-export-btn" onClick={() => setExportOpen(true)}>
-            Export PDF…
-          </button>
+          <details className="admin-bkd-more-actions">
+            <summary className="admin-btn admin-btn-ghost">More</summary>
+            <div className="admin-bkd-more-actions-menu">
+              <button type="button" className="admin-btn admin-btn-ghost" onClick={() => setReminderOpen(true)}>
+                Set reminder
+              </button>
+              <button type="button" className="admin-btn admin-btn-ghost" onClick={() => setExportOpen(true)}>
+                Export PDF
+              </button>
+              <button type="button" className="admin-btn admin-btn-danger admin-btn-ghost" onClick={handleDelete}>
+                Delete booking
+              </button>
+            </div>
+          </details>
         </div>
         <header className="admin-bkd-hero">
           <div className="admin-bkd-hero-datebox" aria-hidden>
@@ -764,7 +780,6 @@ export default function BookingDetailPage() {
             {(booking as Booking & { booking_code?: string | null }).booking_code && (
               <p className="admin-bkd-code">
                 <code className="admin-bk-code">{(booking as Booking & { booking_code?: string | null }).booking_code}</code>
-                <span className="admin-bkd-code-hint">Booking code — use on invoices, payments, vendors</span>
               </p>
             )}
             <div className="admin-bkd-hero-row">
@@ -788,20 +803,22 @@ export default function BookingDetailPage() {
             </div>
             <p className="admin-bkd-sub">{eventDateLabel}</p>
             {form.client_email ? <p className="admin-bkd-email">{form.client_email}</p> : null}
+            {form.client_phone ? (
+              <p className="admin-bkd-phone">
+                <a href={`tel:${String(form.client_phone).replace(/\s/g, "")}`}>{form.client_phone}</a>
+              </p>
+            ) : null}
           </div>
         </header>
         {paymentsSummary ? (
           <div className="admin-bkd-banner-payments">
             <div className="admin-bkd-banner-payments-top">
-              <span className="admin-bkd-banner-payments-title">Payments</span>
+              <span className="admin-bkd-banner-payments-title">Money</span>
               <span className="admin-bkd-banner-payments-totals">
                 <strong>{formatPounds(paymentsSummary.totals.customer_received)}</strong> collected
                 <span className="admin-bkd-banner-payments-dot">·</span>
-                <strong>{formatPounds(paymentsSummary.totals.milestone_pending)}</strong> still due
+                <strong>{formatPounds(paymentsSummary.totals.milestone_pending)}</strong> still owed
               </span>
-              <Link href={`/admin/payments/booking/${id}`} className="admin-bkd-banner-payments-link">
-                Ledger →
-              </Link>
             </div>
           </div>
         ) : null}
@@ -853,7 +870,6 @@ export default function BookingDetailPage() {
         }}
         onSave={handleSave}
         saving={saving}
-        eventDateLabel={eventDateLabel}
       />
 
       <BookingWorkspacePanel
@@ -898,14 +914,7 @@ export default function BookingDetailPage() {
                   Contracts &amp; agreements
                 </h3>
                 <p className="admin-bws-lead admin-bws-lead--compact" style={{ marginBottom: 0 }}>
-                  Pick a template and generate. Tick client/venue signed when collected. Hire contract and T&amp;C produce
-                  official PDFs.{" "}
-                  <Link href="/admin/agreements" className="admin-link">
-                    Edit templates
-                  </Link>
-                  {agreementsMigration ? (
-                    <span className="admin-bws-agreements-mig"> — run migration 039 in Supabase first.</span>
-                  ) : null}
+                  Generate the hire contract PDF for this booking.
                 </p>
               </div>
               {!agreementsMigration && agreementTemplates.length > 0 ? (

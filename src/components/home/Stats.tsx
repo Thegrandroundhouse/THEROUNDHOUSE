@@ -3,11 +3,11 @@ export default function Stats() {
     <section className="stats-section" aria-label="Venue highlights">
       <div className="container stats-grid">
         <div className="stat">
-          <span className="stat-value">3</span>
-          <span className="stat-label">Luxury Ballrooms</span>
+          <span className="stat-value">2</span>
+          <span className="stat-label">Luxury Halls</span>
         </div>
         <div className="stat">
-          <span className="stat-value">0–800</span>
+          <span className="stat-value">600+</span>
           <span className="stat-label">Capacity</span>
         </div>
         <div className="stat">

@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { getAdminClient } from "@/lib/admin-api";
 
-/** Admin-only: paginated audit log. */
+const LIST_COLUMNS =
+  "id, actor_display_name, actor_email, action, entity_type, entity_id, booking_id, summary, created_at";
+
+/** Admin-only: paginated audit log (list view — no heavy JSON payloads). */
 export async function GET(request: Request) {
   const user = await getAuthUserFromRequest(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -18,23 +21,40 @@ export async function GET(request: Request) {
   const to = from + limit - 1;
   const entityType = searchParams.get("entity_type");
   let bookingId = searchParams.get("booking_id");
-  const bookingCode = searchParams.get("booking_code");
-  if (bookingCode?.trim() && !bookingId) {
-    const { data: b } = await supabase.from("bookings").select("id").eq("booking_code", bookingCode.trim()).maybeSingle();
-    if (b) bookingId = b.id;
+  const bookingCode = searchParams.get("booking_code")?.trim();
+  let filterWarning: string | null = null;
+
+  if (bookingCode && !bookingId) {
+    const { data: b } = await supabase.from("bookings").select("id").eq("booking_code", bookingCode).maybeSingle();
+    if (b?.id) {
+      bookingId = b.id;
+    } else {
+      return NextResponse.json({
+        rows: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 1,
+        filterWarning: `No booking found with code “${bookingCode}”.`,
+      });
+    }
   }
+
   const action = searchParams.get("action");
-  const q = searchParams.get("q"); // summary search
+  const q = searchParams.get("q")?.trim();
   const dateFrom = searchParams.get("date_from");
   const dateTo = searchParams.get("date_to");
 
-  let qb = supabase.from("admin_audit_log").select("*", { count: "exact" });
+  let qb = supabase.from("admin_audit_log").select(LIST_COLUMNS, { count: "exact" });
   if (entityType) qb = qb.eq("entity_type", entityType);
   if (bookingId) qb = qb.eq("booking_id", bookingId);
   if (action) qb = qb.eq("action", action);
   if (dateFrom) qb = qb.gte("created_at", dateFrom);
   if (dateTo) qb = qb.lte("created_at", dateTo + "T23:59:59.999Z");
-  if (q?.trim()) qb = qb.ilike("summary", `%${q.trim()}%`);
+  if (q) {
+    const safe = q.replace(/[%_]/g, "");
+    if (safe) qb = qb.ilike("summary", `%${safe}%`);
+  }
 
   const { data, error, count } = await qb.order("created_at", { ascending: false }).range(from, to);
   if (error) {
@@ -43,22 +63,28 @@ export async function GET(request: Request) {
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
   const rows = data ?? [];
-  const bidSet = [...new Set(rows.map((r: { booking_id: string | null }) => r.booking_id).filter(Boolean))] as string[];
-  let codeMap: Record<string, string> = {};
+  const bidSet = [...new Set(rows.map((r) => r.booking_id).filter(Boolean))] as string[];
+  const codeMap: Record<string, string> = {};
   if (bidSet.length) {
     const { data: bs } = await supabase.from("bookings").select("id, booking_code").in("id", bidSet);
-    for (const b of bs || []) if (b.booking_code) codeMap[b.id] = b.booking_code;
+    for (const b of bs || []) {
+      if (b.booking_code) codeMap[b.id] = b.booking_code;
+    }
   }
-  const rowsWithCode = rows.map((r: Record<string, unknown> & { booking_id: string | null }) => ({
+
+  const rowsWithCode = rows.map((r) => ({
     ...r,
     booking_code: r.booking_id ? codeMap[r.booking_id] ?? null : null,
   }));
+
   return NextResponse.json({
     rows: rowsWithCode,
     total: count ?? 0,
     page,
     limit,
     totalPages: Math.ceil((count || 0) / limit) || 1,
+    filterWarning,
   });
 }

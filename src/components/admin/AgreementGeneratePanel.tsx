@@ -1060,8 +1060,8 @@ export function AgreementGeneratePanel({
               desc="Adds the full T&amp;C appendix at the end of the PDF — editable below for this booking."
             >
               <p className="admin-vnd-new-hint" style={{ margin: "0 0 0.75rem" }}>
-                Each block is one section in the PDF. The <strong>first line</strong> is the heading; blank lines separate
-                paragraphs. The <strong>last block</strong> is the acceptance / signature section. Defaults come from{" "}
+                Only edit if you need to change the legal wording for this booking. The last block is the signature page.
+                To reset, use the button below or{" "}
                 <Link href="/admin/settings?tab=contract" className="admin-link">
                   Settings → Hire contract
                 </Link>

@@ -41,12 +41,12 @@ export function GrandHero({ content = {}, images = {} }: Props) {
           </li>
           <li className="hidden h-12 w-px bg-gradient-to-b from-transparent via-ivory/25 to-transparent md:block" />
           <li className="flex flex-col items-center gap-1">
-            <span className="font-serif text-3xl font-semibold bg-gradient-to-b from-gold-light to-gold bg-clip-text text-transparent md:text-4xl">3</span>
-            <span>Luxury Ballrooms</span>
+            <span className="font-serif text-3xl font-semibold bg-gradient-to-b from-gold-light to-gold bg-clip-text text-transparent md:text-4xl">2</span>
+            <span>Luxury Halls</span>
           </li>
           <li className="hidden h-12 w-px bg-gradient-to-b from-transparent via-ivory/25 to-transparent md:block" />
           <li className="flex flex-col items-center gap-1">
-            <span className="font-serif text-3xl font-semibold bg-gradient-to-b from-gold-light to-gold bg-clip-text text-transparent md:text-4xl">800+</span>
+            <span className="font-serif text-3xl font-semibold bg-gradient-to-b from-gold-light to-gold bg-clip-text text-transparent md:text-4xl">600+</span>
             <span>Capacity</span>
           </li>
         </ul>

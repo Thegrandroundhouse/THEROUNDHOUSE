@@ -93,7 +93,7 @@ function IncludesSection({ data }: { data: RoundhouseContractData }) {
             <Text style={theme.bullet}>• {item.label}</Text>
             {item.subBullets?.map((sub) => (
               <Text key={sub} style={theme.subBullet}>
-                ◦ {sub}
+                - {sub}
               </Text>
             ))}
           </React.Fragment>
@@ -123,7 +123,7 @@ function IncludesSection({ data }: { data: RoundhouseContractData }) {
               <Text style={theme.bullet}>• {INCLUDE_BULLET_LABELS.event_supervision}</Text>
               {EVENT_SUPERVISION_SUB_BULLETS.map((sub) => (
                 <Text key={sub} style={theme.subBullet}>
-                  ◦ {sub}
+                  - {sub}
                 </Text>
               ))}
             </React.Fragment>

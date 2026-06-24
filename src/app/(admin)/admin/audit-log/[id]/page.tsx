@@ -34,6 +34,16 @@ function actionPillClass(action: string): string {
   return "admin-audit-pill";
 }
 
+function safeJson(data: unknown, max = 12000): string {
+  try {
+    const s = JSON.stringify(data, null, 2);
+    if (s.length <= max) return s;
+    return `${s.slice(0, max)}\n\n… (truncated — too much data to show on screen)`;
+  } catch {
+    return String(data);
+  }
+}
+
 export default function AuditLogDetailPage() {
   const { id } = useParams() as { id: string };
   const [entry, setEntry] = useState<Entry | null>(null);
@@ -215,13 +225,13 @@ export default function AuditLogDetailPage() {
             {entry.payload_before != null ? (
               <div className="admin-audit-detail-json-block">
                 <h3 className="admin-audit-detail-sub">Before</h3>
-                <pre className="admin-audit-detail-pre">{JSON.stringify(entry.payload_before, null, 2)}</pre>
+                <pre className="admin-audit-detail-pre">{safeJson(entry.payload_before)}</pre>
               </div>
             ) : null}
             {entry.payload_after != null ? (
               <div className="admin-audit-detail-json-block">
                 <h3 className="admin-audit-detail-sub">After</h3>
-                <pre className="admin-audit-detail-pre">{JSON.stringify(entry.payload_after, null, 2)}</pre>
+                <pre className="admin-audit-detail-pre">{safeJson(entry.payload_after)}</pre>
               </div>
             ) : null}
           </>
@@ -234,7 +244,7 @@ export default function AuditLogDetailPage() {
         <section className="admin-card admin-audit-detail-section">
           <h2 className="admin-audit-detail-heading">Extra data</h2>
           <p className="admin-audit-detail-muted">Additional technical details (e.g. export options, file names).</p>
-          <pre className="admin-audit-detail-pre">{JSON.stringify(entry.metadata, null, 2)}</pre>
+          <pre className="admin-audit-detail-pre">{safeJson(entry.metadata)}</pre>
         </section>
       ) : null}
 

@@ -84,18 +84,18 @@ export function BookingWorkspacePanel({
   };
 
   const TAB_LABELS: Record<WorkspaceTab, string> = {
-    overview: "1 · Summary",
-    wedding: "2 · Event details",
-    agreements: "3 · Contracts",
-    payments: "4 · Payments",
-    tasks: "5 · Tasks",
-    vendors: "6 · Vendors",
-    docs: "7 · Documents",
-    comms: "8 · Comms",
+    overview: "Summary",
+    wedding: "Event details",
+    agreements: "Contract",
+    payments: "Payments",
+    tasks: "Tasks",
+    vendors: "Vendors",
+    docs: "Documents",
+    comms: "Messages",
   };
-  const TABS: WorkspaceTab[] = overviewSlot
-    ? ["overview", "wedding", "agreements", "payments", "tasks", "vendors", "docs", "comms"]
-    : ["wedding", "agreements", "payments", "tasks", "vendors", "docs", "comms"];
+  const PRIMARY_TABS: WorkspaceTab[] = overviewSlot ? ["overview", "agreements"] : ["agreements"];
+  const MORE_TABS: WorkspaceTab[] = ["wedding", "payments", "tasks", "vendors", "docs", "comms"];
+  const isMoreTab = MORE_TABS.includes(tab);
 
   if (err) {
     return (
@@ -118,25 +118,48 @@ export function BookingWorkspacePanel({
 
   const w = ws.wedding || {};
   return (
-    <section className="admin-bws" aria-label="Booking workspace">
+    <section className="admin-bws admin-bws--simple" aria-label="Booking workspace">
       <div className="admin-bws-head">
-        <h2 className="admin-bws-title">Booking workspace</h2>
-        <p className="admin-bws-sub">Follow the tabs left to right — summary, event, contract, payments, then ops.</p>
+        <h2 className="admin-bws-title">Booking</h2>
       </div>
-      <div className="admin-bws-tabs" role="tablist" aria-label="Workspace sections">
-        {TABS.map((t) => (
+      <div className="admin-bws-tabs admin-bws-tabs--simple" role="tablist" aria-label="Main sections">
+        {PRIMARY_TABS.map((t) => (
           <button
             key={t}
             type="button"
             role="tab"
             aria-selected={tab === t}
-            className={tab === t ? "admin-bws-tab admin-bws-tab--on" : "admin-bws-tab"}
+            className={tab === t ? "admin-bws-tab admin-bws-tab--on admin-bws-tab--primary" : "admin-bws-tab admin-bws-tab--primary"}
             onClick={() => setTab(t)}
           >
             {TAB_LABELS[t]}
           </button>
         ))}
       </div>
+      <details className="admin-bws-more-tools" open={isMoreTab}>
+        <summary>More tools</summary>
+        <div className="admin-bws-more-tools-grid">
+          {MORE_TABS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={tab === t ? "admin-btn admin-btn-primary admin-btn-sm" : "admin-btn admin-btn-ghost admin-btn-sm"}
+              onClick={() => setTab(t)}
+            >
+              {TAB_LABELS[t]}
+            </button>
+          ))}
+        </div>
+      </details>
+      {isMoreTab ? (
+        <p className="admin-bws-viewing" role="status">
+          Viewing: <strong>{TAB_LABELS[tab]}</strong>
+          {" · "}
+          <button type="button" className="admin-link-btn" onClick={() => setTab(overviewSlot ? "overview" : "agreements")}>
+            Back to summary
+          </button>
+        </p>
+      ) : null}
       <div className="admin-bws-body" role="tabpanel">
       {workspaceFlash && (
         <div

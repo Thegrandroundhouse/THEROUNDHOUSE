@@ -2341,6 +2341,24 @@ section.bg-ink p.section-sub,
 .admin-rem-v2-title {
   font-weight: 600;
 }
+.admin-rem-v2-title-btn,
+.admin-rem-v2-note-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.admin-rem-v2-title-btn:hover,
+.admin-rem-v2-note-btn:hover {
+  color: var(--color-accent, #b45309);
+  text-decoration: underline;
+}
+.admin-rem-v2-modal-link {
+  font-weight: 600;
+}
 .admin-rem-v2-badge {
   display: inline-block;
   margin-left: 0.35rem;
@@ -9618,6 +9636,12 @@ section.bg-ink p.section-sub,
   font-family: var(--font-display);
   color: var(--color-text);
 }
+.admin-pay-amt--ok {
+  color: #15803d;
+}
+.admin-pay-amt--due {
+  color: #b45309;
+}
 .admin-pay-empty {
   text-align: center;
   color: var(--color-text-muted);
@@ -12173,6 +12197,249 @@ section.bg-ink p.section-sub,
   color: var(--color-text-muted);
 }
 
+.admin-bk-slot-panel {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.admin-bk-slot-hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+.admin-bk-slot-error {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  color: #92400e;
+  font-size: 0.9rem;
+}
+.admin-bk-slot-banner {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.admin-bk-slot-banner--ok {
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.1);
+}
+.admin-bk-slot-banner p {
+  margin: 0.35rem 0 0;
+  color: var(--color-text-muted);
+}
+.admin-bk-date-bookings--simple {
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 0.85rem;
+}
+.admin-bk-date-bookings--simple ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+}
+.admin-bk-date-bookings--simple li {
+  margin-bottom: 0.25rem;
+}
+
+.admin-bkd-quick--open {
+  margin-bottom: 1.25rem;
+}
+.admin-bkd-quick--open .admin-bkd-quick-form {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.admin-bkd-more-actions,
+.admin-bk-more-actions {
+  position: relative;
+  display: inline-block;
+}
+.admin-bkd-more-actions summary,
+.admin-bk-more-actions summary {
+  list-style: none;
+  cursor: pointer;
+}
+.admin-bkd-more-actions summary::-webkit-details-marker,
+.admin-bk-more-actions summary::-webkit-details-marker {
+  display: none;
+}
+.admin-bkd-more-actions-menu,
+.admin-bk-more-actions-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 10rem;
+  padding: 0.5rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+.admin-bk-new-btn {
+  font-size: 1rem;
+  padding: 0.7rem 1.25rem;
+}
+.admin-bk-table-simple {
+  padding: 0;
+  overflow: hidden;
+}
+.admin-pay-table--simple td,
+.admin-pay-table--simple th {
+  font-size: 0.95rem;
+  padding: 0.85rem 1rem;
+}
+.admin-bws--simple .admin-bws-title {
+  margin-bottom: 0.75rem;
+}
+.admin-bws-tabs--simple {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+.admin-bws-tab--primary {
+  font-size: 1rem;
+  padding: 0.65rem 1.25rem;
+  min-height: 2.75rem;
+}
+.admin-bws-more-tools {
+  margin-bottom: 1rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--color-border);
+}
+.admin-bws-more-tools summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  list-style: none;
+}
+.admin-bws-more-tools summary::-webkit-details-marker {
+  display: none;
+}
+.admin-bws-more-tools-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+.admin-bws-viewing {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+.admin-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-gold-dark);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* Create booking — simple mode (older-friendly) */
+.admin-bk-simple-card {
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 248, 244, 0.98));
+}
+.admin-bk-simple-lead {
+  margin: 0 0 1rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+.admin-bk-simple-grid .admin-form-group label {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.admin-bk-simple-input {
+  font-size: 1.05rem !important;
+  padding: 0.7rem 0.85rem !important;
+  min-height: 2.75rem;
+}
+.admin-bk-more-details {
+  border: 1px dashed var(--color-border);
+  background: var(--color-surface);
+}
+.admin-bk-more-summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.25rem 0;
+  color: var(--color-gold-dark);
+  list-style: none;
+}
+.admin-bk-more-summary::-webkit-details-marker {
+  display: none;
+}
+.admin-bk-more-inner {
+  margin-top: 1rem;
+  border: none;
+  box-shadow: none;
+  padding-top: 0;
+  background: transparent;
+}
+.admin-bk-simple-actions .admin-btn-primary {
+  font-size: 1rem;
+  padding: 0.75rem 1.5rem;
+}
+.admin-bko-quick-pay--simple .admin-bko-simple-input {
+  font-size: 1.1rem;
+  padding: 0.7rem 0.85rem;
+  min-height: 2.75rem;
+}
+.admin-bko-simple-submit {
+  margin-top: 0.85rem;
+  font-size: 1rem;
+  padding: 0.7rem 1.25rem;
+}
+.admin-bks-facts--simple .admin-bks-fact-value--big {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.admin-bks-fact-value--ok {
+  color: #15803d;
+}
+.admin-bks-instalments-details {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.75rem;
+}
+.admin-bks-instalments-summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  list-style: none;
+}
+.admin-bks-instalments-summary::-webkit-details-marker {
+  display: none;
+}
+.admin-bkd-phone {
+  margin: 0.25rem 0 0;
+  font-size: 1rem;
+}
+.admin-bkd-phone a {
+  color: var(--color-gold-dark);
+  text-decoration: none;
+  font-weight: 600;
+}
+.admin-bkd-quick-grid--1 {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 16rem;
+}
+
 /* Create booking — payments & instalments */
 .admin-bk-pay-card .admin-section-title {
   margin-bottom: 0.35rem;
@@ -13755,6 +14022,35 @@ section.bg-ink p.section-sub,
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--color-border);
+}
+
+.admin-audit-table-card--busy {
+  opacity: 0.65;
+  pointer-events: none;
+}
+.admin-audit-result-meta {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  min-height: 1.25rem;
+}
+.admin-audit-more-filters {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+.admin-audit-more-filters summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--color-gold-dark);
+  list-style: none;
+}
+.admin-audit-more-filters summary::-webkit-details-marker {
+  display: none;
+}
+.admin-audit-filters-grid--simple {
+  align-items: end;
 }
 
 /* Audit log — list & detail */

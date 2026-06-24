@@ -36,18 +36,13 @@ type Props = {
   eventDateLabel?: string;
 };
 
-function formatPreviewTotal(totalPounds: string): string {
-  const t = totalPounds.trim();
-  if (t) return `£${t}`;
-  return "—";
-}
-
-/** Open the quick-update dropdown (used by “Edit details” in the page header). */
+/** Scroll to the edit form (used by header “Edit booking”). */
 export function openBookingQuickEdit() {
-  const el = document.getElementById("booking-quick-edit") as HTMLDetailsElement | null;
+  const el = document.getElementById("booking-quick-edit");
   if (!el) return;
-  el.open = true;
   el.scrollIntoView({ behavior: "smooth", block: "start" });
+  const first = el.querySelector<HTMLInputElement>("input, select, textarea");
+  first?.focus();
 }
 
 export function BookingQuickEditPanel({
@@ -67,9 +62,8 @@ export function BookingQuickEditPanel({
   onPackageSelect,
   onSave,
   saving,
-  eventDateLabel,
 }: Props) {
-  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash === "#booking-quick-edit") {
@@ -77,37 +71,10 @@ export function BookingQuickEditPanel({
     }
   }, []);
 
-  const previewName = form.client_name?.trim() || form.client_email?.trim() || "No client name";
-  const previewDate =
-    eventDateLabel ||
-    (form.event_date
-      ? new Date(form.event_date + "T12:00:00").toLocaleDateString("en-GB", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-        })
-      : "No date");
-  const previewStatus = form.status ? STATUS_LABELS[form.status] : "Pending";
-  const previewTotal = formatPreviewTotal(totalPounds);
-
   return (
-    <details ref={detailsRef} className="admin-bkd-quick" id="booking-quick-edit">
-      <summary className="admin-bkd-quick-summary" aria-labelledby="booking-quick-edit-title">
-        <div className="admin-bkd-quick-summary-main">
-          <span className="admin-bkd-quick-chevron" aria-hidden>
-            ▾
-          </span>
-          <div>
-            <h2 id="booking-quick-edit-title" className="admin-bkd-quick-title">
-              Quick update
-            </h2>
-            <p className="admin-bkd-quick-preview">
-              {previewName} · {previewDate} · {previewTotal} · {previewStatus}
-            </p>
-          </div>
-        </div>
-        <span className="admin-bkd-quick-summary-hint">Click to expand</span>
-      </summary>
+    <section ref={panelRef} className="admin-card admin-bk-simple-card admin-bkd-quick admin-bkd-quick--open" id="booking-quick-edit">
+      <h2 className="admin-section-title">Edit booking</h2>
+      <p className="admin-bkd-quick-lead">Change details below, then press Save.</p>
 
       <form
         className="admin-bkd-quick-form"
@@ -115,25 +82,24 @@ export function BookingQuickEditPanel({
           e.preventDefault();
           await onSave(e);
         }}
-        onClick={(e) => e.stopPropagation()}
       >
-        <p className="admin-bkd-quick-lead">Update client, event and money — then save.</p>
-
         <div className="admin-bkd-quick-block">
           <h3 className="admin-bkd-quick-block-title">Client</h3>
           <div className="admin-bkd-quick-grid admin-bkd-quick-grid--3">
             <label className="admin-bkd-quick-field">
               <span>Name</span>
               <input
+                className="admin-bk-simple-input"
                 value={form.client_name ?? ""}
                 onChange={(e) => setForm((f) => ({ ...f, client_name: e.target.value }))}
-                placeholder="Client name"
+                placeholder="Full name"
                 autoComplete="name"
               />
             </label>
             <label className="admin-bkd-quick-field">
               <span>Email *</span>
               <input
+                className="admin-bk-simple-input"
                 type="email"
                 required
                 value={form.client_email ?? ""}
@@ -145,6 +111,7 @@ export function BookingQuickEditPanel({
             <label className="admin-bkd-quick-field">
               <span>Phone</span>
               <input
+                className="admin-bk-simple-input"
                 type="tel"
                 value={form.client_phone ?? ""}
                 onChange={(e) => setForm((f) => ({ ...f, client_phone: e.target.value }))}
@@ -157,10 +124,11 @@ export function BookingQuickEditPanel({
 
         <div className="admin-bkd-quick-block">
           <h3 className="admin-bkd-quick-block-title">Event</h3>
-          <div className="admin-bkd-quick-grid admin-bkd-quick-grid--4">
+          <div className="admin-bkd-quick-grid admin-bkd-quick-grid--2">
             <label className="admin-bkd-quick-field">
               <span>Date *</span>
               <input
+                className="admin-bk-simple-input"
                 type="date"
                 required
                 min={minEventDateForInput}
@@ -169,8 +137,9 @@ export function BookingQuickEditPanel({
               />
             </label>
             <label className="admin-bkd-quick-field">
-              <span>Slot / venue</span>
+              <span>Time slot</span>
               <select
+                className="admin-bk-simple-input"
                 value={form.event_slot_key == null || form.event_slot_key === "" ? "" : form.event_slot_key}
                 onChange={(e) =>
                   setForm((f) => ({
@@ -191,6 +160,7 @@ export function BookingQuickEditPanel({
             <label className="admin-bkd-quick-field">
               <span>Event type</span>
               <input
+                className="admin-bk-simple-input"
                 value={form.event_type ?? ""}
                 onChange={(e) => setForm((f) => ({ ...f, event_type: e.target.value }))}
                 placeholder="Wedding, party…"
@@ -198,8 +168,8 @@ export function BookingQuickEditPanel({
             </label>
             <label className="admin-bkd-quick-field">
               <span>Package</span>
-              <select value={form.package_id ?? ""} onChange={(e) => onPackageSelect(e.target.value)}>
-                <option value="">— Pick package —</option>
+              <select className="admin-bk-simple-input" value={form.package_id ?? ""} onChange={(e) => onPackageSelect(e.target.value)}>
+                <option value="">— No package —</option>
                 {packagesList.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
@@ -222,13 +192,14 @@ export function BookingQuickEditPanel({
         </div>
 
         <div className="admin-bkd-quick-block">
-          <h3 className="admin-bkd-quick-block-title">Money (£)</h3>
-          <div className="admin-bkd-quick-grid admin-bkd-quick-grid--3">
+          <h3 className="admin-bkd-quick-block-title">Money</h3>
+          <div className="admin-bkd-quick-grid admin-bkd-quick-grid--1">
             <label className="admin-bkd-quick-field admin-bkd-quick-field--money">
-              <span>Total</span>
+              <span>Contract total (£)</span>
               <div className="admin-bkd-pound">
                 <span className="admin-bkd-pound-prefix">£</span>
                 <input
+                  className="admin-bk-simple-input"
                   inputMode="decimal"
                   value={totalPounds}
                   onChange={(e) => setTotalPounds(e.target.value)}
@@ -236,60 +207,35 @@ export function BookingQuickEditPanel({
                 />
               </div>
             </label>
-            <label className="admin-bkd-quick-field admin-bkd-quick-field--money">
-              <span>Deposit</span>
-              <div className="admin-bkd-pound">
-                <span className="admin-bkd-pound-prefix">£</span>
-                <input
-                  inputMode="decimal"
-                  value={depositPounds}
-                  onChange={(e) => setDepositPounds(e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-            </label>
-            <label className="admin-bkd-quick-field admin-bkd-quick-field--money">
-              <span>Balance</span>
-              <div className="admin-bkd-pound">
-                <span className="admin-bkd-pound-prefix">£</span>
-                <input
-                  inputMode="decimal"
-                  value={balancePounds}
-                  onChange={(e) => setBalancePounds(e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-            </label>
           </div>
         </div>
 
-        <details className="admin-bkd-quick-more">
-          <summary>More — notes, extras &amp; status</summary>
+        <details className="admin-bkd-quick-more" open>
+          <summary>More — deposit, notes &amp; status</summary>
           <div className="admin-bkd-quick-more-body">
+            <div className="admin-bkd-quick-grid admin-bkd-quick-grid--2">
+              <label className="admin-bkd-quick-field admin-bkd-quick-field--money">
+                <span>Deposit (£)</span>
+                <div className="admin-bkd-pound">
+                  <span className="admin-bkd-pound-prefix">£</span>
+                  <input inputMode="decimal" value={depositPounds} onChange={(e) => setDepositPounds(e.target.value)} placeholder="0.00" />
+                </div>
+              </label>
+              <label className="admin-bkd-quick-field admin-bkd-quick-field--money">
+                <span>Balance (£)</span>
+                <div className="admin-bkd-pound">
+                  <span className="admin-bkd-pound-prefix">£</span>
+                  <input inputMode="decimal" value={balancePounds} onChange={(e) => setBalancePounds(e.target.value)} placeholder="0.00" />
+                </div>
+              </label>
+            </div>
             <label className="admin-bkd-quick-field admin-bkd-quick-field--full">
-              <span>Package name (if not in list)</span>
-              <input
-                value={form.package_name ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, package_name: e.target.value }))}
-                placeholder="e.g. Full hire"
-              />
-            </label>
-            <label className="admin-bkd-quick-field admin-bkd-quick-field--full">
-              <span>Extras / add-ons</span>
-              <textarea
-                rows={2}
-                value={form.extras ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, extras: e.target.value }))}
-                placeholder="Extra hour, late finish, cake stand…"
-              />
-            </label>
-            <label className="admin-bkd-quick-field admin-bkd-quick-field--full">
-              <span>Special requirements</span>
+              <span>Client requests</span>
               <textarea
                 rows={2}
                 value={form.special_requirements ?? ""}
                 onChange={(e) => setForm((f) => ({ ...f, special_requirements: e.target.value }))}
-                placeholder="Catering, access, timings…"
+                placeholder="Catering, access…"
               />
             </label>
             <label className="admin-bkd-quick-field admin-bkd-quick-field--full">
@@ -298,7 +244,7 @@ export function BookingQuickEditPanel({
                 rows={2}
                 value={form.notes ?? ""}
                 onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                placeholder="Staff-only notes"
+                placeholder="Staff only"
               />
             </label>
             <div className="admin-bkd-quick-statuses">
@@ -320,17 +266,11 @@ export function BookingQuickEditPanel({
         </details>
 
         <div className="admin-bkd-quick-foot">
-          <Link href={`/admin/payments/booking/${bookingId}`} className="admin-bko-link">
-            Payments →
-          </Link>
-          <Link href={`/admin/invoices?booking_id=${bookingId}`} className="admin-bko-link">
-            Invoices →
-          </Link>
-          <button type="submit" className="admin-btn admin-btn-primary admin-bkd-quick-save" disabled={saving}>
+          <button type="submit" className="admin-btn admin-btn-primary admin-bkd-quick-save admin-bko-simple-submit" disabled={saving}>
             {saving ? "Saving…" : "Save changes"}
           </button>
         </div>
       </form>
-    </details>
+    </section>
   );
 }

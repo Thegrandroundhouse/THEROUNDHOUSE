@@ -59,6 +59,29 @@ export async function GET(request: Request) {
   }
   const { data, error, count } = await qb.order("event_date", { ascending: false }).range(from, to);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const bookingRows = data ?? [];
+  const bookingIds = bookingRows.map((b: { id: string }) => b.id);
+  const paidByBooking: Record<string, number> = {};
+  if (bookingIds.length) {
+    const { data: paymentRows } = await supabase
+      .from("payment_records")
+      .select("booking_id, amount_cents, flow")
+      .in("booking_id", bookingIds)
+      .eq("flow", "customer_in");
+    for (const p of paymentRows ?? []) {
+      const bid = (p as { booking_id: string | null }).booking_id;
+      if (!bid) continue;
+      paidByBooking[bid] = (paidByBooking[bid] ?? 0) + ((p as { amount_cents: number }).amount_cents || 0);
+    }
+  }
+  const rows = bookingRows.map((b: { id: string; total_cents: number | null }) => {
+    const paid_cents = paidByBooking[b.id] ?? 0;
+    const total = b.total_cents ?? 0;
+    const due_cents = total > 0 ? Math.max(0, total - paid_cents) : null;
+    return { ...b, paid_cents, due_cents };
+  });
+
   const now = new Date();
   const y = now.getFullYear();
   const m = now.getMonth();
@@ -69,7 +92,7 @@ export async function GET(request: Request) {
     supabase.from("bookings").select("*", { count: "exact", head: true }).gte("event_date", `${ms}-01`).lte("event_date", `${ms}-31`).neq("status", "cancelled"),
   ]);
   return NextResponse.json({
-    rows: data ?? [],
+    rows,
     total: count ?? 0,
     page,
     limit,

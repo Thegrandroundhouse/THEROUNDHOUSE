@@ -2,9 +2,9 @@ import { AnimateIn } from "@/components/animations/AnimateIn";
 
 export function GrandStats() {
   const items = [
-    { value: "3", label: "Luxury Ballrooms" },
+    { value: "2", label: "Luxury Halls" },
     { value: "1,500+", label: "Google Reviews" },
-    { value: "800+", label: "Maximum Capacity" },
+    { value: "600+", label: "Maximum Capacity" },
   ];
   return (
     <AnimateIn as="section" animation="fade-in-up" className="relative border-y border-gold/10 bg-ink py-20 text-ivory md:py-24">

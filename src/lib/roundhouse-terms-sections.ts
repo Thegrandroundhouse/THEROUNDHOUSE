@@ -282,13 +282,11 @@ b) Increases in the costs of materials, equipment or other services necessary fo
 
   `24. ENTIRE AGREEMENT
 
-24.1 These Terms & Conditions accompanied by the contract constitute the entire agreement between the customer and the company in connection with the customer's booking, purchase or use of the services. Any failure by the company to exercise or enforce any right or provision of these terms and conditions shall not constitute a waiver of such right or provision if any provision of these conditions is found by accord of competent jurisdiction to be invalid, the parties nevertheless agree that the Courts should endeavour to give effect to the parties' intentions as reflected in the provision and that other provision remain in full force and effect.
+24.1 These Terms & Conditions accompanied by the contract constitute the entire agreement between the customer and the company in connection with the customer's booking, purchase or use of the services. Any failure by the company to exercise or enforce any right or provision of these terms and conditions shall not constitute a waiver of such right or provision if any provision of these conditions is found by a court of competent jurisdiction to be invalid, the parties nevertheless agree that the Courts should endeavour to give effect to the parties' intentions as reflected in the provision and that other provision remain in full force and effect.
 
-24.2 We are not responsible for delays outside of our control. If our supply of the products and services is delayed by an event outside of our control then we will contact you as soon as possible to let you know and we will take steps to minimise the effect of the delay. Provided we do this we will not be liable for delays caused by the event.
+24.2 We are not responsible for delays outside of our control. If our supply of the products and services is delayed by an event outside of our control then we will contact you as soon as possible to let you know and we will take steps to minimise the effect of the delay. Provided we do this we will not be liable for delays caused by the event. Should this contract be affected by a nationwide lockdown or UK Government restriction due to Coronavirus, we will assist you with moving the date of your function to an alternative like for like date as a goodwill gesture. If an alternative date is not required, then you can receive a refund for any products or services you have paid for but not received subject to the deduction of any costs incurred by the company.`,
 
-24.3 Should this contract be affected by a nationwide lockdown or UK Government restriction due to Coronavirus, we will assist you with moving the date of your function to an alternative like for like date as a goodwill gesture. If an alternative date is not required, then you can receive a refund for any products or services you have paid for but not received subject to the deduction of any costs incurred by the company.
-
-I confirm I have read, understood and accept the above Terms and Conditions, which will apply to any booking(s) I have with The Roundhouse Banqueting Limited.
+  `I confirm I have read, understood and accept the above Terms and Conditions, which will apply to any booking(s) I have with The Roundhouse Banqueting Limited.
 
 Clients Name in Full……………………………………………………  Date of Function……..……………………………………
 

@@ -5,8 +5,8 @@ const HERO_TITLE = "A Luxury Wedding Venue Like No Other";
 const HERO_SUBTITLE = "Where every celebration is crafted with care, elegance and timeless attention to detail.";
 const STATS = [
   { value: "1,500+", label: "Reviews" },
-  { value: "3", label: "Luxury Ballrooms" },
-  { value: "800+", label: "Capacity" },
+  { value: "2", label: "Luxury Halls" },
+  { value: "600+", label: "Capacity" },
 ];
 
 export default function Hero() {

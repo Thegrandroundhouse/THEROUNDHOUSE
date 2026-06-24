@@ -28,6 +28,22 @@ function formatDateTime(s: string) {
   });
 }
 
+function toDatetimeLocalValue(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return (
+    d.getFullYear() +
+    "-" +
+    String(d.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(d.getDate()).padStart(2, "0") +
+    "T" +
+    String(d.getHours()).padStart(2, "0") +
+    ":" +
+    String(d.getMinutes()).padStart(2, "0")
+  );
+}
+
 export default function RemindersPage() {
   const { alert, confirm } = useAdminDialog();
   const [rows, setRows] = useState<ReminderRow[]>([]);
@@ -48,6 +64,13 @@ export default function RemindersPage() {
   const [formRemindAt, setFormRemindAt] = useState("");
   const [saving, setSaving] = useState(false);
   const [counts, setCounts] = useState({ upcoming: 0, done: 0, total: 0 });
+
+  const [viewReminder, setViewReminder] = useState<ReminderRow | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editBody, setEditBody] = useState("");
+  const [editRemindAt, setEditRemindAt] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const loadCounts = useCallback(() => {
     Promise.all([
@@ -241,6 +264,71 @@ export default function RemindersPage() {
     setDateTo("");
   };
 
+  const openReminderModal = (r: ReminderRow) => {
+    setViewReminder(r);
+    setEditTitle(r.title);
+    setEditBody(r.body || "");
+    setEditRemindAt(toDatetimeLocalValue(r.remind_at));
+    setEditError(null);
+  };
+
+  const closeReminderModal = () => {
+    setViewReminder(null);
+    setEditError(null);
+  };
+
+  const saveReminderEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!viewReminder) return;
+    const title = editTitle.trim();
+    if (!title) {
+      setEditError("Title is required");
+      return;
+    }
+    const remindAt = editRemindAt.trim();
+    if (!remindAt) {
+      setEditError("Date & time is required");
+      return;
+    }
+    const dt = new Date(remindAt);
+    if (Number.isNaN(dt.getTime())) {
+      setEditError("Invalid date/time");
+      return;
+    }
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const res = await adminFetch(`/api/admin/reminders/${viewReminder.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          body: editBody.trim() || null,
+          remind_at: dt.toISOString(),
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setEditError((j as { error?: string }).error || "Failed to save");
+        return;
+      }
+      closeReminderModal();
+      load();
+      loadCounts();
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const linkedHref = (r: ReminderRow) =>
+    r.booking_id
+      ? `/admin/bookings/${r.booking_id}`
+      : r.invoice_id
+        ? `/admin/invoices/${r.invoice_id}`
+        : r.enquiry_id
+          ? `/admin/enquiries/${r.enquiry_id}`
+          : "";
+
   return (
     <div className="admin-rem-v2 admin-crm-wide">
       <div className="admin-page-banner">
@@ -335,6 +423,72 @@ export default function RemindersPage() {
         </div>
       </div>
 
+      {viewReminder && (
+        <div
+          className="admin-bko-export-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reminder-view-title"
+          onClick={(e) => e.target === e.currentTarget && closeReminderModal()}
+        >
+          <div className="admin-bko-export-modal admin-rem-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-bko-export-head">
+              <h2 id="reminder-view-title">Reminder</h2>
+              <button type="button" className="admin-inv-modal-x" onClick={closeReminderModal} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <p className="admin-bko-export-desc">
+              {viewReminder.done ? "This reminder is marked done." : "Edit the reminder below and save your changes."}
+              {linkedHref(viewReminder) ? (
+                <>
+                  {" "}
+                  <Link href={linkedHref(viewReminder)} className="admin-rem-v2-modal-link">
+                    Open linked record →
+                  </Link>
+                </>
+              ) : null}
+            </p>
+            <form onSubmit={saveReminderEdit}>
+              <div className="admin-form-group">
+                <label>
+                  Title <span className="admin-rem-required">*</span>
+                </label>
+                <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} required />
+              </div>
+              <div className="admin-form-group">
+                <label>
+                  Date & time <span className="admin-rem-required">*</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editRemindAt}
+                  onChange={(e) => setEditRemindAt(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="admin-form-group">
+                <label>Note</label>
+                <textarea rows={4} value={editBody} onChange={(e) => setEditBody(e.target.value)} placeholder="Notes for this reminder" />
+              </div>
+              {editError ? (
+                <p className="admin-bk-error-msg" role="alert">
+                  {editError}
+                </p>
+              ) : null}
+              <div className="admin-inv-modal-actions">
+                <button type="button" className="admin-btn admin-btn-ghost" onClick={closeReminderModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="admin-btn admin-btn-primary" disabled={editSaving}>
+                  {editSaving ? "Saving…" : "Save changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showForm && (
         <div className="admin-rem-v2-form-card">
           <form onSubmit={submitNew} className="admin-rem-v2-form">
@@ -409,23 +563,31 @@ export default function RemindersPage() {
                 </thead>
                 <tbody>
                   {rows.map((r) => {
-                    const viewHref = r.booking_id
-                      ? `/admin/bookings/${r.booking_id}`
-                      : r.invoice_id
-                        ? `/admin/invoices/${r.invoice_id}`
-                        : r.enquiry_id
-                          ? `/admin/enquiries/${r.enquiry_id}`
-                          : "";
+                    const viewHref = linkedHref(r);
                     return (
                       <tr key={r.id} className={r.done ? "admin-rem-v2-row--done" : ""}>
                         <td className="admin-rem-v2-when">{formatDateTime(r.remind_at)}</td>
                         <td className="admin-rem-v2-td-title">
-                          <span className="admin-rem-v2-title">{r.title}</span>
+                          <button
+                            type="button"
+                            className="admin-rem-v2-title admin-rem-v2-title-btn"
+                            onClick={() => openReminderModal(r)}
+                          >
+                            {r.title}
+                          </button>
                           {r.title.startsWith("Event day") ? (
                             <span className="admin-rem-v2-badge admin-rem-v2-badge--event">Event day</span>
                           ) : null}
                         </td>
-                        <td className="admin-rem-v2-note">{r.body || "—"}</td>
+                        <td className="admin-rem-v2-note">
+                          {r.body ? (
+                            <button type="button" className="admin-rem-v2-note-btn" onClick={() => openReminderModal(r)}>
+                              {r.body.length > 80 ? `${r.body.slice(0, 80)}…` : r.body}
+                            </button>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
                         <td className="admin-rem-v2-links">
                           {r.booking_id ? <span className="admin-pay-sub">Booking</span> : null}
                           {r.invoice_id ? <span className="admin-pay-sub">Invoice</span> : null}
@@ -441,9 +603,12 @@ export default function RemindersPage() {
                         </td>
                         <td className="admin-rem-v2-td-actions">
                           <div className="admin-rem-v2-actions admin-rem-v2-actions--inline">
+                            <button type="button" className="admin-btn admin-btn-sm admin-btn-primary" onClick={() => openReminderModal(r)}>
+                              View
+                            </button>
                             {viewHref ? (
-                              <Link href={viewHref} className="admin-btn admin-btn-sm admin-btn-primary">
-                                View
+                              <Link href={viewHref} className="admin-btn admin-btn-sm admin-btn-ghost">
+                                Open
                               </Link>
                             ) : null}
                             {!r.done ? (

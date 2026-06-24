@@ -4,7 +4,7 @@
   "private": true,
   "description": "The Roundhouse wedding venue website — Next.js, Node.js, Supabase",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
