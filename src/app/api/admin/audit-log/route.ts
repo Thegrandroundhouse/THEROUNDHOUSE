@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { getAdminClient } from "@/lib/admin-api";
+import { extractBookingCode } from "@/lib/audit-log-display";
 
 const LIST_COLUMNS =
   "id, actor_display_name, actor_email, action, entity_type, entity_id, booking_id, summary, created_at";
@@ -74,10 +75,16 @@ export async function GET(request: Request) {
     }
   }
 
-  const rowsWithCode = rows.map((r) => ({
-    ...r,
-    booking_code: r.booking_id ? codeMap[r.booking_id] ?? null : null,
-  }));
+  const rowsWithCode = rows.map((r) => {
+    const liveCode = r.booking_id ? codeMap[r.booking_id] ?? null : null;
+    const payloadCode = liveCode
+      ? null
+      : extractBookingCode(r.summary, null);
+    return {
+      ...r,
+      booking_code: liveCode || payloadCode,
+    };
+  });
 
   return NextResponse.json({
     rows: rowsWithCode,

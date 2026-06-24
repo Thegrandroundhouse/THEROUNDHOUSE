@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { getAdminClient } from "@/lib/admin-api";
+import {
+  extractBookingCode,
+  payloadToDisplayRows,
+} from "@/lib/audit-log-display";
 
 /** Admin-only: fetch a single audit log entry by id. */
 export async function GET(
@@ -24,15 +28,43 @@ export async function GET(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const payloadBefore =
+    data.payload_before && typeof data.payload_before === "object" && !Array.isArray(data.payload_before)
+      ? (data.payload_before as Record<string, unknown>)
+      : null;
+  const payloadAfter =
+    data.payload_after && typeof data.payload_after === "object" && !Array.isArray(data.payload_after)
+      ? (data.payload_after as Record<string, unknown>)
+      : null;
+
   let booking_code: string | null = null;
+  let booking_still_exists = false;
   if (data.booking_id) {
     const { data: b } = await supabase
       .from("bookings")
       .select("booking_code")
       .eq("id", data.booking_id)
       .maybeSingle();
-    booking_code = b?.booking_code ?? null;
+    if (b?.booking_code) {
+      booking_code = b.booking_code;
+      booking_still_exists = true;
+    }
+  }
+  if (!booking_code) {
+    booking_code =
+      extractBookingCode(data.summary, payloadBefore) ||
+      extractBookingCode(data.summary, payloadAfter);
   }
 
-  return NextResponse.json({ ...data, booking_code });
+  const entityType = String(data.entity_type || "");
+  const display_before = payloadToDisplayRows(payloadBefore, entityType);
+  const display_after = payloadToDisplayRows(payloadAfter, entityType);
+
+  return NextResponse.json({
+    ...data,
+    booking_code,
+    booking_still_exists,
+    display_before,
+    display_after,
+  });
 }

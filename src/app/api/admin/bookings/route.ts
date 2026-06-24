@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { writeAuditLog } from "@/lib/audit-log";
+import { bookingAuditSnapshot } from "@/lib/audit-log-display";
 import { setupBookingPayments } from "@/lib/booking-payment-setup";
 import { bookingMoneyFromLedger } from "@/lib/booking-money-summary";
 import { reserveUniqueBookingCode } from "@/lib/booking-code";
@@ -290,14 +291,7 @@ export async function POST(request: Request) {
     entity_id: data.id,
     booking_id: data.id,
     summary: `Created booking ${data.booking_code} ${data.client_name || data.client_email} · ${data.event_date}`,
-    payload_after: {
-      id: data.id,
-      booking_code: data.booking_code,
-      client_name: data.client_name,
-      event_date: data.event_date,
-      status: data.status,
-      total_cents: data.total_cents,
-    },
+    payload_after: bookingAuditSnapshot(data as Record<string, unknown>),
   });
   return NextResponse.json(data);
 }

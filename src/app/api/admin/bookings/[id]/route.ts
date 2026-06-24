@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { writeAuditLog } from "@/lib/audit-log";
+import { bookingAuditSnapshot, bookingDeleteSummary } from "@/lib/audit-log-display";
 import {
   assertSlotBookable,
   assertWholeDayBookable,
@@ -126,17 +127,8 @@ export async function DELETE(
     entity_type: "booking",
     entity_id: id,
     booking_id: id,
-    summary: `Deleted booking ${before?.client_name || before?.client_email || id} · ${before?.event_date || ""}`,
-    payload_before: before
-      ? {
-          id: before.id,
-          client_name: before.client_name,
-          client_email: before.client_email,
-          event_date: before.event_date,
-          status: before.status,
-          total_cents: before.total_cents,
-        }
-      : null,
+    summary: bookingDeleteSummary(before as Record<string, unknown>),
+    payload_before: bookingAuditSnapshot(before as Record<string, unknown>),
   });
   return NextResponse.json({ ok: true });
 }

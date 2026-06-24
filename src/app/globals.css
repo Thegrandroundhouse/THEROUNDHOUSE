@@ -14867,6 +14867,20 @@ section.bg-ink p.section-sub,
 .admin-audit-detail-dl dd a:hover {
   text-decoration: underline;
 }
+.admin-audit-detail-dl--records div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 11rem) 1fr;
+  gap: 0.35rem 1rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+.admin-audit-detail-dl--records div:last-child {
+  border-bottom: none;
+}
+.admin-audit-deleted-note {
+  font-size: 0.875rem;
+  font-style: italic;
+}
 .admin-audit-detail-pill {
   display: inline-block;
   padding: 0.25rem 0.6rem;
