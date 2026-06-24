@@ -5851,6 +5851,66 @@ section.bg-ink p.section-sub,
 .admin-hire-settings-price-row--4 {
   grid-template-columns: 1.2fr 0.35fr 1fr auto;
 }
+.admin-hire-settings-backups {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
+}
+.admin-hire-settings-backups-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+.admin-hire-settings-backups-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.admin-hire-settings-backups-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: var(--color-surface-muted, rgba(0, 0, 0, 0.03));
+}
+.admin-hire-settings-backups-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.admin-hire-settings-backups-meta strong {
+  font-size: 0.92rem;
+}
+.admin-hire-settings-backups-meta span {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+.admin-hire-settings-backups-note code {
+  font-size: 0.85em;
+}
+.admin-bkd-contract-save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.admin-bkd-contract-backups {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
+}
 .admin-settings-v2-textarea {
   min-height: 4.5rem;
   resize: vertical;

@@ -22,8 +22,11 @@ import {
   type HireContractSettingsPayload,
 } from "@/lib/hire-contract-settings";
 import type { RoundhousePaymentMilestone } from "@/lib/roundhouse-contract-types";
+import type { BookingContractBackupRow } from "@/lib/booking-contract-draft";
 
 type Template = { id: string; name: string; slug: string; is_preferred: boolean };
+
+type SaveStatus = "idle" | "pending" | "saving" | "saved" | "error";
 
 type PriceRow = { label: string; price: string };
 
@@ -82,7 +85,7 @@ export function AgreementGeneratePanel({
   editContract?: RoundhouseContractData | null;
   onEditConsumed?: () => void;
 }) {
-  const { alert } = useAdminDialog();
+  const { alert, confirm } = useAdminDialog();
   const pdfPreview = useAgreementPdfPreview();
   const [templateId, setTemplateId] = useState("");
   const [draft, setDraft] = useState<RoundhouseContractData | null>(null);
@@ -91,14 +94,58 @@ export function AgreementGeneratePanel({
   const [generating, setGenerating] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [settingsBusiness, setSettingsBusiness] = useState<InvoiceBusinessPayload | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [backups, setBackups] = useState<BookingContractBackupRow[]>([]);
+  const [backupsLoading, setBackupsLoading] = useState(false);
+  const [needsMigration, setNeedsMigration] = useState(false);
+  const [backupBusy, setBackupBusy] = useState<string | null>(null);
   const balanceManualRef = useRef(false);
+  const skipSaveRef = useRef(true);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedTemplate = templates.find((t) => t.id === templateId);
   const isHireContract = selectedTemplate?.slug === BANQUETING_HIRE_SLUG;
   const isTermsPdf = selectedTemplate?.slug === BANQUETING_TERMS_SLUG;
   const isStructuredPdf = isHireContract || isTermsPdf;
 
+  const formatSavedWhen = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : null;
+
+  const loadBackups = useCallback(async () => {
+    setBackupsLoading(true);
+    try {
+      const r = await adminFetch(`/api/admin/bookings/${bookingId}/contract-draft/backups`);
+      if (!r.ok) return;
+      const data = (await r.json()) as { rows?: BookingContractBackupRow[]; needsMigration?: boolean };
+      setBackups(Array.isArray(data.rows) ? data.rows : []);
+      setNeedsMigration(Boolean(data.needsMigration));
+    } catch {
+      setBackups([]);
+    } finally {
+      setBackupsLoading(false);
+    }
+  }, [bookingId]);
+
+  const persistDraft = useCallback(
+    async (payload: RoundhouseContractData) => {
+      setSaveStatus("saving");
+      const r = await adminFetch(`/api/admin/bookings/${bookingId}/contract-draft`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contract: payload }),
+      });
+      if (!r.ok) throw new Error(await parseAdminError(r, "Couldn’t save contract configuration"));
+      const d = (await r.json()) as { saved_at?: string | null };
+      setSavedAt(d.saved_at ?? new Date().toISOString());
+      setSaveStatus("saved");
+      void loadBackups();
+    },
+    [bookingId, loadBackups],
+  );
+
   const loadDraft = useCallback(() => {
+    skipSaveRef.current = true;
     setLoading(true);
     setDraftLoadError(null);
     adminFetch(`/api/admin/bookings/${bookingId}/contract-draft`)
@@ -106,19 +153,77 @@ export function AgreementGeneratePanel({
         if (!r.ok) throw new Error(await parseAdminError(r, "Couldn’t load contract draft"));
         return r.json();
       })
-      .then((d: { draft?: RoundhouseContractData }) => {
-        if (d?.draft) setDraft(applyLineItemTotalsToContract(d.draft));
+      .then((d: { draft?: RoundhouseContractData; saved_at?: string | null }) => {
+        if (d?.draft) {
+          setDraft(applyLineItemTotalsToContract(d.draft));
+          setSavedAt(d.saved_at ?? null);
+          setSaveStatus(d.saved_at ? "saved" : "idle");
+        }
       })
       .catch((err) => {
         setDraft(null);
         setDraftLoadError(err instanceof Error ? err.message : "Couldn’t load contract draft");
       })
-      .finally(() => setLoading(false));
-  }, [bookingId]);
+      .finally(() => {
+        setLoading(false);
+        void loadBackups();
+      });
+  }, [bookingId, loadBackups]);
 
   useEffect(() => {
     loadDraft();
   }, [loadDraft]);
+
+  const createManualBackup = async () => {
+    setBackupBusy("create");
+    try {
+      const r = await adminFetch(`/api/admin/bookings/${bookingId}/contract-draft/backups`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!r.ok) throw new Error(await parseAdminError(r, "Could not create backup"));
+      const data = (await r.json()) as { rows?: BookingContractBackupRow[] };
+      setBackups(Array.isArray(data.rows) ? data.rows : []);
+      await alert("Backup saved.");
+    } catch (e) {
+      await alert(e instanceof Error ? e.message : "Backup failed");
+    } finally {
+      setBackupBusy(null);
+    }
+  };
+
+  const restoreBackup = async (row: BookingContractBackupRow) => {
+    const label = row.label?.trim() || formatSavedWhen(row.created_at) || "this backup";
+    if (
+      !(await confirm(
+        `Restore contract configuration from “${label}”?\n\nYour current saved configuration will be backed up first.`,
+        { title: "Restore backup", confirmLabel: "Restore", variant: "danger" },
+      ))
+    ) {
+      return;
+    }
+    setBackupBusy(row.id);
+    try {
+      const r = await adminFetch(`/api/admin/bookings/${bookingId}/contract-draft/restore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ backup_id: row.id }),
+      });
+      if (!r.ok) throw new Error(await parseAdminError(r, "Could not restore backup"));
+      const data = (await r.json()) as { draft?: RoundhouseContractData; saved_at?: string | null };
+      skipSaveRef.current = true;
+      if (data.draft) setDraft(applyLineItemTotalsToContract(data.draft));
+      setSavedAt(data.saved_at ?? new Date().toISOString());
+      setSaveStatus("saved");
+      await loadBackups();
+      await alert("Contract configuration restored.");
+    } catch (e) {
+      await alert(e instanceof Error ? e.message : "Restore failed");
+    } finally {
+      setBackupBusy(null);
+    }
+  };
 
   useEffect(() => {
     adminFetch("/api/admin/settings/invoice-business")
@@ -155,6 +260,22 @@ export function AgreementGeneratePanel({
     if (!draft) return { paidCents: 0, balanceDueCents: 0 };
     return resolveContractPaymentSummary({ ...draft, ...totals });
   }, [draft, totals]);
+
+  useEffect(() => {
+    if (!isHireContract || !draft) return;
+    if (skipSaveRef.current) {
+      skipSaveRef.current = false;
+      return;
+    }
+    setSaveStatus("pending");
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      void persistDraft(applyLineItemTotalsToContract({ ...draft, ...totals })).catch(() => setSaveStatus("error"));
+    }, 1200);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [draft, isHireContract, totals, persistDraft]);
 
   const updatePaidCents = (cents: number) => {
     setDraft((d) => {
@@ -576,6 +697,28 @@ export function AgreementGeneratePanel({
         <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" onClick={() => setExpanded((x) => !x)}>
           {expanded ? "Hide options" : isHireContract ? "Configure hire contract" : isTermsPdf ? "Preview details" : "Options"}
         </button>
+        {isHireContract && draft ? (
+          <span className="admin-bkd-contract-save-status" aria-live="polite">
+            {saveStatus === "saving" || saveStatus === "pending"
+              ? "Saving…"
+              : saveStatus === "error"
+                ? "Couldn’t save"
+                : savedAt
+                  ? `Saved · ${formatSavedWhen(savedAt)}`
+                  : "Not saved yet"}
+            {saveStatus === "error" ? (
+              <button
+                type="button"
+                className="admin-btn admin-btn-ghost admin-btn-sm"
+                onClick={() =>
+                  void persistDraft(applyLineItemTotalsToContract({ ...draft, ...totals })).catch(() => setSaveStatus("error"))
+                }
+              >
+                Retry
+              </button>
+            ) : null}
+          </span>
+        ) : null}
         <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" disabled={!templateId} onClick={previewPdf}>
           Preview PDF
         </button>
@@ -1245,6 +1388,58 @@ export function AgreementGeneratePanel({
               onChange={(e) => setDraft((d) => (d ? { ...d, editableNotes: e.target.value } : d))}
               placeholder="Any bespoke clauses or notes for this client…"
             />
+          </div>
+
+          <div className="admin-hire-settings-backups admin-bkd-contract-backups">
+            <header className="admin-hire-settings-backups-head">
+              <div>
+                <h4 className="admin-section-title" style={{ fontSize: "0.95rem", margin: 0 }}>
+                  Backups &amp; restore
+                </h4>
+                <p className="admin-vnd-new-hint" style={{ marginTop: "0.35rem", marginBottom: 0 }}>
+                  Configuration saves automatically as you edit. Backups are kept before each save so you can revert.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="admin-btn admin-btn-ghost admin-btn-sm"
+                disabled={backupBusy !== null || needsMigration || saveStatus === "saving" || saveStatus === "pending"}
+                onClick={() => void createManualBackup()}
+              >
+                {backupBusy === "create" ? "Saving…" : "Save backup now"}
+              </button>
+            </header>
+            {needsMigration ? (
+              <p className="admin-vnd-new-hint admin-hire-settings-backups-note">
+                Auto-save requires migration <code>047_booking_contract_draft.sql</code> in Supabase.
+              </p>
+            ) : backupsLoading ? (
+              <p className="admin-settings-loading">Loading backups…</p>
+            ) : backups.length === 0 ? (
+              <p className="admin-vnd-new-hint">No backups yet — edit the contract and wait for auto-save.</p>
+            ) : (
+              <ul className="admin-hire-settings-backups-list">
+                {backups.map((row) => (
+                  <li key={row.id} className="admin-hire-settings-backups-row">
+                    <div className="admin-hire-settings-backups-meta">
+                      <strong>{row.label?.trim() || formatSavedWhen(row.created_at)}</strong>
+                      <span>
+                        {formatSavedWhen(row.created_at)}
+                        {row.created_by_name ? ` · ${row.created_by_name}` : ""}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn-ghost admin-btn-sm"
+                      disabled={backupBusy !== null}
+                      onClick={() => void restoreBackup(row)}
+                    >
+                      {backupBusy === row.id ? "Restoring…" : "Restore"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       ) : !isStructuredPdf ? (

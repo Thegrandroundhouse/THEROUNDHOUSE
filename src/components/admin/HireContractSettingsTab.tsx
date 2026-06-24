@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
+import type { SettingsBackupRow } from "@/lib/settings-backup";
 import {
   HIRE_CONTRACT_SETTINGS_DEFAULTS,
   type HireContractIncludeItemTemplate,
@@ -46,10 +47,85 @@ export function HireContractSettingsTab({
   initial: HireContractSettingsPayload;
   onSaved: (next: HireContractSettingsPayload) => void;
 }) {
-  const { alert } = useAdminDialog();
+  const { alert, confirm } = useAdminDialog();
   const [form, setForm] = useState<HireContractSettingsPayload>(initial);
   const [saving, setSaving] = useState(false);
   const [openSection, setOpenSection] = useState<string>("sections");
+  const [backups, setBackups] = useState<SettingsBackupRow[]>([]);
+  const [backupsLoading, setBackupsLoading] = useState(true);
+  const [needsMigration, setNeedsMigration] = useState(false);
+  const [backupBusy, setBackupBusy] = useState<string | null>(null);
+
+  const loadBackups = useCallback(async () => {
+    setBackupsLoading(true);
+    try {
+      const r = await adminFetch("/api/admin/settings/hire-contract/backups");
+      if (!r.ok) throw new Error(await parseAdminError(r, "Could not load backups"));
+      const data = (await r.json()) as { rows?: SettingsBackupRow[]; needsMigration?: boolean };
+      setBackups(Array.isArray(data.rows) ? data.rows : []);
+      setNeedsMigration(Boolean(data.needsMigration));
+    } catch {
+      setBackups([]);
+    } finally {
+      setBackupsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBackups();
+  }, [loadBackups]);
+
+  const formatBackupWhen = (iso: string) =>
+    new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+
+  const createManualBackup = async () => {
+    setBackupBusy("create");
+    try {
+      const r = await adminFetch("/api/admin/settings/hire-contract/backups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!r.ok) throw new Error(await parseAdminError(r, "Could not create backup"));
+      const data = (await r.json()) as { rows?: SettingsBackupRow[] };
+      setBackups(Array.isArray(data.rows) ? data.rows : []);
+      await alert("Backup saved. You can restore this version anytime.");
+    } catch (err) {
+      await alert(err instanceof Error ? err.message : "Backup failed");
+    } finally {
+      setBackupBusy(null);
+    }
+  };
+
+  const restoreBackup = async (row: SettingsBackupRow) => {
+    const label = row.label?.trim() || formatBackupWhen(row.created_at);
+    if (
+      !(await confirm(
+        `Restore hire contract defaults from “${label}”?\n\nYour current saved settings will be backed up first, then replaced with this version.`,
+        { title: "Restore backup", confirmLabel: "Restore", variant: "danger" },
+      ))
+    ) {
+      return;
+    }
+    setBackupBusy(row.id);
+    try {
+      const r = await adminFetch("/api/admin/settings/hire-contract/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ backup_id: row.id }),
+      });
+      if (!r.ok) throw new Error(await parseAdminError(r, "Could not restore backup"));
+      const data = (await r.json()) as HireContractSettingsPayload;
+      setForm(data);
+      onSaved(data);
+      await loadBackups();
+      await alert("Settings restored from backup.");
+    } catch (err) {
+      await alert(err instanceof Error ? err.message : "Restore failed");
+    } finally {
+      setBackupBusy(null);
+    }
+  };
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +140,7 @@ export function HireContractSettingsTab({
       const data = (await r.json()) as HireContractSettingsPayload;
       setForm(data);
       onSaved(data);
+      await loadBackups();
       await alert("Hire contract defaults saved.");
     } catch (err) {
       await alert(err instanceof Error ? err.message : "Couldn’t save");
@@ -517,6 +594,59 @@ export function HireContractSettingsTab({
           </button>
         </div>
       </form>
+
+      <div className="admin-hire-settings-backups">
+        <header className="admin-hire-settings-backups-head">
+          <div>
+            <h3 className="admin-section-title">Backups &amp; restore</h3>
+            <p className="admin-settings-desc" style={{ marginTop: "0.35rem" }}>
+              A backup is created automatically before each save. You can also save a manual snapshot of the current
+              live settings, then restore any version below.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="admin-btn admin-btn-ghost admin-btn-sm"
+            disabled={backupBusy !== null || needsMigration}
+            onClick={() => void createManualBackup()}
+          >
+            {backupBusy === "create" ? "Saving…" : "Save backup now"}
+          </button>
+        </header>
+
+        {needsMigration ? (
+          <p className="admin-settings-desc admin-hire-settings-backups-note">
+            Backups require database migration <code>046_site_settings_backups.sql</code> — run it in Supabase, then
+            refresh this page.
+          </p>
+        ) : backupsLoading ? (
+          <p className="admin-settings-loading">Loading backups…</p>
+        ) : backups.length === 0 ? (
+          <p className="admin-settings-desc">No backups yet. Save settings once to create the first automatic backup.</p>
+        ) : (
+          <ul className="admin-hire-settings-backups-list">
+            {backups.map((row) => (
+              <li key={row.id} className="admin-hire-settings-backups-row">
+                <div className="admin-hire-settings-backups-meta">
+                  <strong>{row.label?.trim() || formatBackupWhen(row.created_at)}</strong>
+                  <span>
+                    {formatBackupWhen(row.created_at)}
+                    {row.created_by_name ? ` · ${row.created_by_name}` : ""}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-ghost admin-btn-sm"
+                  disabled={backupBusy !== null}
+                  onClick={() => void restoreBackup(row)}
+                >
+                  {backupBusy === row.id ? "Restoring…" : "Restore"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }

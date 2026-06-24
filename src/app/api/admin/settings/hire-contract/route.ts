@@ -8,10 +8,11 @@ import {
   parseHireContractSettingsValue,
   type HireContractSettingsPayload,
 } from "@/lib/hire-contract-settings";
+import { createSettingsBackup, HIRE_CONTRACT_SETTINGS_KEY } from "@/lib/settings-backup";
 
 export type { HireContractSettingsPayload };
 
-const KEY = "hire_contract_defaults";
+const KEY = HIRE_CONTRACT_SETTINGS_KEY;
 
 export async function GET(request: Request) {
   const user = await getAuthUserFromRequest(request);
@@ -37,6 +38,21 @@ export async function PUT(request: Request) {
   const beforePayload: HireContractSettingsPayload = prevRow?.value
     ? parseHireContractSettingsValue(prevRow.value)
     : structuredClone(HIRE_CONTRACT_SETTINGS_DEFAULTS);
+
+  try {
+    await createSettingsBackup(
+      supabase,
+      KEY,
+      beforePayload,
+      user,
+      `Before save · ${new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}`,
+    );
+  } catch (backupErr) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[hire-contract backup]", backupErr);
+    }
+  }
+
   const { error } = await supabase
     .from("site_settings")
     .upsert(
