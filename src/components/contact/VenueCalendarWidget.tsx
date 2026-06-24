@@ -132,7 +132,7 @@ export function VenueCalendarWidget({ compact, onSelectDate }: VenueCalendarWidg
                           : isBooked
                             ? "Fully booked"
                             : isPartial
-                              ? "Some time slots still available — click to choose"
+                              ? "Limited availability — some halls or time slots may still be free"
                               : isClickable
                                 ? "Select this date"
                                 : "Available"
@@ -145,7 +145,7 @@ export function VenueCalendarWidget({ compact, onSelectDate }: VenueCalendarWidg
               </div>
               <div className="calendar-legend">
                 <span className="legend-item"><i className="legend-available" aria-hidden /> Available</span>
-                <span className="legend-item"><i className="legend-partial" aria-hidden /> Some slots left</span>
+                <span className="legend-item"><i className="legend-partial" aria-hidden /> Limited availability</span>
                 <span className="legend-item"><i className="legend-booked" aria-hidden /> Full</span>
               </div>
               {compact && onSelectDate && openDates.length > 0 ? (
@@ -181,7 +181,7 @@ export function VenueCalendarWidget({ compact, onSelectDate }: VenueCalendarWidg
         <p className="section-label text-gold">Availability</p>
         <h2 className="section-heading">Check our calendar</h2>
         <p className="calendar-intro">
-          Fully booked dates are greyed out. Gold-tinted days still have free time slots — pick a date, then choose your preferred slot below.
+          Fully booked dates are greyed out. Gold-tinted days still have availability — one hall may be closed while others remain open, or some time slots may be free.
         </p>
         {content}
       </div>

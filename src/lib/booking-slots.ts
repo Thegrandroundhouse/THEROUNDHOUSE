@@ -139,24 +139,11 @@ export async function isDateOpenForPublicEnquiry(
   dateStr: string,
   config: BookingSlotsConfig,
 ): Promise<boolean> {
-  const { data: cal } = await supabase
-    .from("venue_calendar")
-    .select("date")
-    .eq("date", dateStr)
-    .eq("is_booked", true)
-    .maybeSingle();
-  if (cal) return false;
-  if (!config.enabled || !config.slots.length) {
-    const { data: rows } = await supabase
-      .from("bookings")
-      .select("id")
-      .eq("event_date", dateStr)
-      .in("status", ["pending", "confirmed", "completed"])
-      .limit(1);
-    return (rows ?? []).length === 0;
-  }
-  const slots = await slotAvailabilityForDate(supabase, dateStr, config);
-  return slots.some((s) => s.available);
+  const { listVenueHalls, loadCalendarBlocks } = await import("@/lib/booking-halls");
+  const { isDateOpenForPublicEnquiryHalls } = await import("@/lib/public-calendar-availability");
+  const halls = await listVenueHalls(supabase);
+  const blocks = await loadCalendarBlocks(supabase, dateStr, dateStr);
+  return isDateOpenForPublicEnquiryHalls(supabase, dateStr, config, blocks, halls.map((h) => h.id));
 }
 
 /** Next N calendar days (from start) that are open for an enquiry. */
@@ -238,14 +225,16 @@ export async function adminAvailabilityForDate(
   advisories: string[];
 }> {
   const advisories: string[] = [];
-  const { data: cal } = await supabase
-    .from("venue_calendar")
-    .select("date")
-    .eq("date", dateStr)
-    .eq("is_booked", true)
-    .maybeSingle();
-  if (cal) {
-    advisories.push("This date is blocked on the venue calendar (unavailable).");
+  const { listVenueHalls, loadCalendarBlocks, isHallBlockedOnDate } = await import("@/lib/booking-halls");
+  const { isDateFullyManuallyBlocked, isDatePartiallyManuallyBlocked } = await import(
+    "@/lib/public-calendar-availability"
+  );
+  const halls = await listVenueHalls(supabase);
+  const allHallIds = halls.map((h) => h.id);
+  const blocks = await loadCalendarBlocks(supabase, dateStr, dateStr);
+
+  if (isDateFullyManuallyBlocked(blocks, dateStr, allHallIds)) {
+    advisories.push("This date is fully blocked on the venue calendar (whole venue or all halls).");
     return {
       dateManuallyBlocked: true,
       slotsEnabled: !!(config.enabled && config.slots.length),
@@ -256,6 +245,12 @@ export async function adminAvailabilityForDate(
       availableSlotKeys: [],
       advisories,
     };
+  }
+  if (isDatePartiallyManuallyBlocked(blocks, dateStr, allHallIds)) {
+    const closed = halls.filter((h) => isHallBlockedOnDate(blocks, dateStr, h.id)).map((h) => h.name);
+    if (closed.length) {
+      advisories.push(`Some halls are closed: ${closed.join(", ")}. Other halls may still be available.`);
+    }
   }
 
   if (!config.enabled || !config.slots.length) {

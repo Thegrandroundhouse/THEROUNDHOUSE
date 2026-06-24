@@ -6950,10 +6950,284 @@ section.bg-ink p.section-sub,
   padding: 0.75rem;
   overflow: hidden;
 }
+.admin-cal-view-seg {
+  flex-shrink: 0;
+}
+.admin-cal-year {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  gap: 0.85rem;
+}
+@media (min-width: 1100px) {
+  .admin-cal-year {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+.admin-cal-year-month {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0.5rem;
+  background: var(--color-surface-muted, rgba(0, 0, 0, 0.02));
+}
+.admin-cal-year-month-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  margin-bottom: 0.45rem;
+  padding: 0.15rem 0.2rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 6px;
+}
+.admin-cal-year-month-head:hover {
+  background: rgba(199, 162, 89, 0.12);
+}
+.admin-cal-year-month-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+.admin-cal-year-month-meta {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+.admin-cal-year-mini {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.admin-cal-year-dow {
+  text-align: center;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  line-height: 1.2;
+}
+.admin-cal-year-cell {
+  aspect-ratio: 1;
+  min-height: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.admin-cal-year-cell--empty {
+  visibility: hidden;
+  pointer-events: none;
+}
+.admin-cal-year-cell--free {
+  background: #ecfdf5;
+  color: #065f46;
+}
+.admin-cal-year-cell--booked {
+  background: #fff7ed;
+  color: #9a3412;
+}
+.admin-cal-year-cell--blocked {
+  background: #f1f5f9;
+  color: #64748b;
+}
+.admin-cal-year-cell--selected {
+  border-color: var(--color-gold);
+  box-shadow: 0 0 0 1px rgba(199, 162, 89, 0.45);
+}
+.admin-cal-year-cell--today {
+  outline: 1px solid var(--color-gold);
+}
 .admin-cal-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 4px;
+}
+.admin-cal-year-cell--today {
+  outline: 1px solid var(--color-gold);
+}
+.admin-cal-cell--partial {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: rgba(217, 119, 6, 0.25);
+}
+.admin-cal-year-cell--partial {
+  background: #fef3c7;
+  color: #92400e;
+}
+.admin-cal-pill--partial {
+  font-size: 0.5rem;
+  color: #b45309;
+}
+.admin-cal-legend-partial::before {
+  background: #fef3c7;
+  border: 1px solid rgba(217, 119, 6, 0.35);
+}
+.admin-cal-sidebar-scroll-hint {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  background: rgba(30, 58, 95, 0.04);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+.admin-cal-hall-status {
+  padding: 1rem 1.15rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.admin-cal-hall-status-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+.admin-cal-hall-status-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.admin-cal-hall-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+.admin-cal-hall-status-row--available {
+  border-color: rgba(16, 185, 129, 0.25);
+}
+.admin-cal-hall-status-row--booked {
+  border-color: rgba(234, 88, 12, 0.25);
+  background: #fff7ed;
+}
+.admin-cal-hall-status-row--unavailable {
+  border-color: rgba(100, 116, 139, 0.35);
+  background: #f8fafc;
+}
+.admin-cal-hall-status-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1;
+}
+.admin-cal-hall-status-main strong {
+  font-size: 0.85rem;
+}
+.admin-cal-hall-status-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+.admin-cal-hall-status-bookings {
+  font-size: 0.75rem;
+  color: var(--color-text);
+  opacity: 0.9;
+}
+.admin-cal-hall-status-actions {
+  flex-shrink: 0;
+}
+.admin-cal-hall-status-note {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+.admin-cal-sidebar-block-target {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+.admin-cal-sidebar-block-target-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-bottom: 0.65rem;
+}
+.admin-cal-sidebar-block-select {
+  width: 100%;
+}
+.admin-cal-sidebar-block-note {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+.admin-cal-sidebar-booking-detail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 1.15rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.admin-cal-sidebar-booking-detail {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 0.85rem;
+  background: var(--color-bg);
+}
+.admin-cal-sidebar-booking-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+}
+.admin-cal-sidebar-booking-dl {
+  margin: 0 0 0.75rem;
+  display: grid;
+  gap: 0.45rem;
+}
+.admin-cal-sidebar-booking-dl div {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+}
+.admin-cal-sidebar-booking-dl dt {
+  margin: 0;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+.admin-cal-sidebar-booking-dl dd {
+  margin: 0;
+}
+@media (min-width: 800px) {
+  .admin-cal-sidebar-body {
+    max-height: min(70vh, 720px);
+  }
+}
+.admin-cal-day-note {
+  padding: 1rem 1.15rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.admin-cal-day-note-input {
+  width: 100%;
+  margin-bottom: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.82rem;
+  resize: vertical;
+  min-height: 4.5rem;
 }
 .admin-cal-dow {
   text-align: center;

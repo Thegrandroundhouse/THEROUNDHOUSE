@@ -7,10 +7,20 @@ import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import { AdminStatsCards } from "@/components/admin/AdminStatsCards";
 import { formatLocalDateParts, todayLocalDateString } from "@/lib/local-date";
-import { manualBlockedDatesForFilter, type VenueHall } from "@/lib/booking-halls";
+import {
+  blockLabelForDate,
+  blocksForDate,
+  dayBlockLevel,
+  isHallBlockedOnDate,
+  manualBlockedDatesForFilter,
+  type VenueHall,
+} from "@/lib/booking-halls";
 
 const MONTHS = "January February March April May June July August September October November December".split(" ");
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const YEAR_OPTIONS = Array.from({ length: 16 }, (_, i) => new Date().getFullYear() - 5 + i);
+
+type CalendarViewMode = "month" | "year";
 
 type BookingItem = {
   id: string;
@@ -25,7 +35,7 @@ type BookingItem = {
   hall_label?: string;
 };
 type BookingsByDate = Record<string, BookingItem[]>;
-type ManualBlock = { date: string; space_id: string | null };
+type ManualBlock = { date: string; space_id: string | null; block_note?: string | null };
 
 function todayStr() {
   return todayLocalDateString();
@@ -51,6 +61,43 @@ function displaySlotTime(key: string, timeLabel?: string) {
   return SLOT_TIME_FALLBACK[key] ?? "";
 }
 
+type DayCellState = { kind: "booked" | "blocked" | "partial" | "free"; blockLabel: string | null };
+
+function getDayCellState(
+  dateStr: string,
+  bookings: BookingItem[],
+  manualBlocks: ManualBlock[],
+  halls: VenueHall[],
+  hallFilter: string,
+  manualBlocked: Set<string>,
+): DayCellState {
+  if (bookings.length > 0) return { kind: "booked", blockLabel: null };
+  if (hallFilter === "all") {
+    const level = dayBlockLevel(
+      manualBlocks,
+      dateStr,
+      halls.map((h) => h.id),
+    );
+    const blockLabel = blockLabelForDate(manualBlocks, dateStr, halls);
+    if (level === "full") return { kind: "blocked", blockLabel };
+    if (level === "partial") return { kind: "partial", blockLabel };
+    return { kind: "free", blockLabel: null };
+  }
+  if (manualBlocked.has(dateStr)) {
+    return { kind: "blocked", blockLabel: blockLabelForDate(manualBlocks, dateStr, halls) };
+  }
+  return { kind: "free", blockLabel: null };
+}
+
+function blockTargetLabel(target: string, halls: VenueHall[]): string {
+  if (target === "whole") return "whole venue (all halls)";
+  return halls.find((h) => h.id === target)?.name ?? "this hall";
+}
+
+function blockTargetSpaceId(target: string): string | null {
+  return target === "whole" ? null : target;
+}
+
 function CalendarPageInner() {
   const { confirm, alert } = useAdminDialog();
   const searchParams = useSearchParams();
@@ -58,11 +105,14 @@ function CalendarPageInner() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
+  const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [bookingsByDate, setBookingsByDate] = useState<BookingsByDate>({});
   const [manualBlocks, setManualBlocks] = useState<ManualBlock[]>([]);
   const [halls, setHalls] = useState<VenueHall[]>([]);
-  /** all = combined view; hall uuid = one hall; whole = whole-venue blocks only */
+  /** all = combined view; hall uuid = filter to one hall */
   const [hallFilter, setHallFilter] = useState<string>("all");
+  /** whole = all halls, or a hall id — used when closing / opening days */
+  const [blockTarget, setBlockTarget] = useState<string>("whole");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -73,7 +123,9 @@ function CalendarPageInner() {
   const [bookingStatusView, setBookingStatusView] = useState<"active" | "all">("active");
   const [slotDayInfo, setSlotDayInfo] = useState<PublicSlotDay | null>(null);
   const [slotsLoading, setSlotsLoading] = useState(false);
-  const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
+  const [dayNote, setDayNote] = useState("");
+  const [dayNoteSaving, setDayNoteSaving] = useState(false);
+  const [blockNote, setBlockNote] = useState("");
   const calCardRef = useRef<HTMLDivElement>(null);
   /** Desktop: sidebar height matches calendar card so both columns align */
   const [sidebarMatchedH, setSidebarMatchedH] = useState<number | null>(null);
@@ -97,7 +149,13 @@ function CalendarPageInner() {
       ro.disconnect();
       mq.removeEventListener("change", update);
     };
-  }, [loading, year, month, bookingStatusView]);
+  }, [loading, year, month, bookingStatusView, viewMode]);
+
+  useEffect(() => {
+    if (hallFilter !== "all" && halls.some((h) => h.id === hallFilter)) {
+      setBlockTarget(hallFilter);
+    }
+  }, [hallFilter, halls]);
 
   useEffect(() => {
     const d = searchParams.get("date");
@@ -114,6 +172,7 @@ function CalendarPageInner() {
   useEffect(() => {
     if (!selected) {
       setSlotDayInfo(null);
+      setDayNote("");
       return;
     }
     setSlotsLoading(true);
@@ -122,6 +181,11 @@ function CalendarPageInner() {
       .then((data: PublicSlotDay) => setSlotDayInfo(data && typeof data === "object" ? data : null))
       .catch(() => setSlotDayInfo(null))
       .finally(() => setSlotsLoading(false));
+
+    adminFetch(`/api/admin/calendar-day-note?date=${selected}`)
+      .then((r) => (r.ok ? r.json() : { note: "" }))
+      .then((d: { note?: string }) => setDayNote(typeof d.note === "string" ? d.note : ""))
+      .catch(() => setDayNote(""));
   }, [selected]);
 
   useEffect(() => {
@@ -137,7 +201,11 @@ function CalendarPageInner() {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await adminFetch(`/api/admin/calendar-month?year=${year}&month=${month}`);
+      const url =
+        viewMode === "year"
+          ? `/api/admin/calendar-year?year=${year}`
+          : `/api/admin/calendar-month?year=${year}&month=${month}`;
+      const res = await adminFetch(url);
       if (!res.ok) throw new Error(await parseAdminError(res, "Couldn’t load calendar"));
       const data = await res.json();
       setBookingsByDate(data.bookingsByDate ?? {});
@@ -151,7 +219,7 @@ function CalendarPageInner() {
     } finally {
       setLoading(false);
     }
-  }, [year, month]);
+  }, [year, month, viewMode]);
 
   useEffect(() => {
     load();
@@ -171,7 +239,7 @@ function CalendarPageInner() {
     [manualBlocks, hallFilter, allHallIds],
   );
 
-  const blockSpaceId = hallFilter === "all" ? null : hallFilter === "whole" ? null : hallFilter;
+  const blockSpaceId = blockTargetSpaceId(blockTarget);
 
   const filteredByDate = useMemo(() => {
     const out: BookingsByDate = {};
@@ -180,7 +248,7 @@ function CalendarPageInner() {
         bookingStatusView === "all"
           ? arr
           : arr.filter((b) => b.status !== "cancelled");
-      if (hallFilter !== "all" && hallFilter !== "whole") {
+      if (hallFilter !== "all") {
         list = list.filter(
           (b) =>
             !b.hall_ids?.length ||
@@ -192,12 +260,22 @@ function CalendarPageInner() {
     return out;
   }, [bookingsByDate, bookingStatusView, hallFilter]);
 
+  const statsDays = useMemo(() => {
+    if (viewMode === "month") return days.map(({ dateStr }) => dateStr);
+    const out: string[] = [];
+    for (let m = 0; m < 12; m++) {
+      const lastDay = new Date(year, m + 1, 0).getDate();
+      for (let d = 1; d <= lastDay; d++) out.push(formatLocalDateParts(year, m, d));
+    }
+    return out;
+  }, [viewMode, days, year]);
+
   const stats = useMemo(() => {
     let bookedDays = 0;
     let closedOnly = 0;
     let free = 0;
     let totalBookingsCount = 0;
-    for (const { dateStr } of days) {
+    for (const dateStr of statsDays) {
       const bookings = filteredByDate[dateStr] ?? [];
       const manual = manualBlocked.has(dateStr);
       if (bookings.length > 0) {
@@ -206,23 +284,54 @@ function CalendarPageInner() {
       } else if (manual) closedOnly++;
       else free++;
     }
-    return { bookedDays, closedOnly, free, total: days.length, totalBookingsCount };
-  }, [days, filteredByDate, manualBlocked]);
+    return { bookedDays, closedOnly, free, total: statsDays.length, totalBookingsCount };
+  }, [statsDays, filteredByDate, manualBlocked]);
 
-  const blockTargetLabel =
-    hallFilter === "all"
-      ? "whole venue (all halls)"
-      : hallFilter === "whole"
-        ? "whole venue"
-        : halls.find((h) => h.id === hallFilter)?.name || "this hall";
+  const agendaBookings = useMemo(() => {
+    return Object.entries(filteredByDate)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .flatMap(([dateStr, list]) => list.map((b) => ({ dateStr, ...b })));
+  }, [filteredByDate]);
 
-  async function postCalendarDay(body: Record<string, unknown>) {
+  const openMonth = (monthIndex: number, dateStr?: string) => {
+    setViewMode("month");
+    setMonth(monthIndex);
+    if (dateStr) {
+      setSelected(dateStr);
+      setRangeEnd(dateStr);
+    }
+  };
+
+  const closeTargetLabel = blockTargetLabel(blockTarget, halls);
+
+  async function postCalendarDay(body: Record<string, unknown>, spaceId?: string | null, note?: string) {
+    const sid = spaceId !== undefined ? spaceId : blockSpaceId;
+    const payload: Record<string, unknown> = { ...body, space_id: sid };
+    if (body.action === "block" && note?.trim()) payload.block_note = note.trim();
     return adminFetch("/api/admin/calendar-day", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...body, space_id: blockSpaceId }),
+      body: JSON.stringify(payload),
     });
   }
+
+  const saveDayNote = async () => {
+    if (!selected) return;
+    setDayNoteSaving(true);
+    try {
+      const r = await adminFetch("/api/admin/calendar-day-note", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: selected, note: dayNote }),
+      });
+      if (!r.ok) throw new Error(await parseAdminError(r, "Could not save note"));
+      await alert("Day note saved (staff only — not shown on public calendar).");
+    } catch (e) {
+      await alert(e instanceof Error ? e.message : "Could not save note");
+    } finally {
+      setDayNoteSaving(false);
+    }
+  };
 
   const goToday = () => {
     const t = new Date();
@@ -231,22 +340,30 @@ function CalendarPageInner() {
     setSelected(todayStr());
   };
 
-  async function toggleDay(dateStr: string, hasBooking: boolean, manualOnly: boolean) {
+  async function toggleDay(
+    dateStr: string,
+    hasBooking: boolean,
+    manualOnly: boolean,
+    spaceId: string | null = blockSpaceId,
+    note?: string,
+  ) {
+    const targetLabel = blockTargetLabel(spaceId == null ? "whole" : spaceId, halls);
+    const noteToSave = note ?? blockNote;
     if (hasBooking) {
       await alert("This date has a booking — open Bookings to change.");
       return;
     }
     if (manualOnly) {
-      if (!(await confirm(`Open ${dateStr} for ${blockTargetLabel}?`, { title: "Open day" }))) return;
-      const res = await postCalendarDay({ date: dateStr, action: "unblock" });
+      if (!(await confirm(`Open ${dateStr} for ${targetLabel}?`, { title: "Open day" }))) return;
+      const res = await postCalendarDay({ date: dateStr, action: "unblock" }, spaceId);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         await alert(d.error || "Could not unblock");
         return;
       }
     } else {
-      if (!(await confirm(`Mark ${dateStr} unavailable for ${blockTargetLabel}?`, { title: "Close day", confirmLabel: "Close day" }))) return;
-      const res = await postCalendarDay({ date: dateStr, action: "block" });
+      if (!(await confirm(`Mark ${dateStr} unavailable for ${targetLabel}?`, { title: "Close day", confirmLabel: "Close day" }))) return;
+      const res = await postCalendarDay({ date: dateStr, action: "block" }, spaceId, noteToSave);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         await alert(d.error || "Could not block");
@@ -265,7 +382,7 @@ function CalendarPageInner() {
       await alert("End date must be on or after start date.");
       return;
     }
-    if (!(await confirm(`Mark every day from ${selected} through ${rangeEnd} unavailable for ${blockTargetLabel}? Days with bookings are skipped.`, { title: "Close range", confirmLabel: "Close" }))) return;
+    if (!(await confirm(`Mark every day from ${selected} through ${rangeEnd} unavailable for ${closeTargetLabel}? Days with bookings are skipped.`, { title: "Close range", confirmLabel: "Close" }))) return;
     setRangeBusy(true);
     try {
       const res = await postCalendarDay({ date: selected, endDate: rangeEnd, action: "block" });
@@ -288,7 +405,7 @@ function CalendarPageInner() {
       return;
     }
     if (selected > rangeEnd) return;
-    if (!(await confirm(`Remove manual closes from ${selected} through ${rangeEnd} for ${blockTargetLabel}?`, { title: "Open range", confirmLabel: "Open range" }))) return;
+    if (!(await confirm(`Remove manual closes from ${selected} through ${rangeEnd} for ${closeTargetLabel}?`, { title: "Open range", confirmLabel: "Open range" }))) return;
     setRangeBusy(true);
     try {
       const res = await postCalendarDay({ date: selected, endDate: rangeEnd, action: "unblock" });
@@ -303,23 +420,68 @@ function CalendarPageInner() {
     }
   }
 
-  const selectedBookings = selected ? bookingsByDate[selected] ?? [] : [];
-  const selectedManual = selected && manualBlocked.has(selected);
-  const selectedHasBooking = selectedBookings.length > 0;
-
-  useEffect(() => {
-    if (!selected) {
-      setActiveBookingId(null);
-      return;
-    }
+  const selectedDayAllBookings = useMemo(() => {
+    if (!selected) return [];
     const list = bookingsByDate[selected] ?? [];
-    setActiveBookingId((prev) => {
-      if (prev && list.some((b) => b.id === prev)) return prev;
-      return list[0]?.id ?? null;
-    });
-  }, [selected, bookingsByDate]);
+    return bookingStatusView === "all" ? list : list.filter((b) => b.status !== "cancelled");
+  }, [selected, bookingsByDate, bookingStatusView]);
 
-  const activeBooking = activeBookingId ? selectedBookings.find((b) => b.id === activeBookingId) : selectedBookings[0];
+  const hallDayRows = useMemo(() => {
+    if (!selected) return [];
+    const rows: {
+      key: string;
+      label: string;
+      spaceId: string | null;
+      status: "Available" | "Booked" | "Unavailable";
+      bookings: BookingItem[];
+      blocked: boolean;
+      blockNote: string | null;
+    }[] = [];
+    const wholeBlocked = isHallBlockedOnDate(manualBlocks, selected, null);
+    const wholeBlockRow = manualBlocks.find((b) => b.date === selected && b.space_id == null);
+    rows.push({
+      key: "whole",
+      label: "Whole venue (all halls)",
+      spaceId: null,
+      status: wholeBlocked ? "Unavailable" : selectedDayAllBookings.length ? "Booked" : "Available",
+      bookings: selectedDayAllBookings,
+      blocked: wholeBlocked,
+      blockNote: wholeBlockRow?.block_note ?? null,
+    });
+    for (const h of halls) {
+      const blocked = isHallBlockedOnDate(manualBlocks, selected, h.id);
+      const hallBookings = selectedDayAllBookings.filter(
+        (b) => !b.hall_ids?.length || b.hall_ids.includes(h.id),
+      );
+      const blockRow = manualBlocks.find((b) => b.date === selected && b.space_id === h.id);
+      rows.push({
+        key: h.id,
+        label: h.name,
+        spaceId: h.id,
+        status: hallBookings.length ? "Booked" : blocked ? "Unavailable" : "Available",
+        bookings: hallBookings,
+        blocked,
+        blockNote: blockRow?.block_note ?? null,
+      });
+    }
+    return rows;
+  }, [selected, manualBlocks, halls, selectedDayAllBookings]);
+
+  const selectedTargetBlocked = selected
+    ? isHallBlockedOnDate(manualBlocks, selected, blockTarget === "whole" ? null : blockTarget)
+    : false;
+
+  const hasBookingForBlockTarget = useMemo(() => {
+    if (!selected) return false;
+    const list = selectedDayAllBookings;
+    if (blockTarget === "whole") return list.length > 0;
+    return list.some((b) => !b.hall_ids?.length || b.hall_ids.includes(blockTarget));
+  }, [selected, blockTarget, selectedDayAllBookings]);
+
+  const selectedBlockInfo = selected
+    ? blocksForDate(manualBlocks, selected)
+    : { wholeVenue: false, hallIds: [] as string[] };
+
   const isToday = (dateStr: string) => dateStr === todayStr();
 
   const publicCalUrl = typeof window !== "undefined" ? `${window.location.origin}/contact` : "/contact";
@@ -350,39 +512,79 @@ function CalendarPageInner() {
             </p>
           </div>
           <div className="admin-bk-hero-actions admin-cal-banner-actions">
-            <div className="admin-cal-month-picker-wrap">
+            <div className="admin-crm-filters-seg admin-cal-view-seg" role="group" aria-label="Calendar view">
               <button
                 type="button"
-                className="admin-btn admin-btn-ghost admin-cal-nav-btn"
-                onClick={() => (month === 0 ? (setMonth(11), setYear((y) => y - 1)) : setMonth((m) => m - 1))}
-                aria-label="Previous month"
+                className={viewMode === "month" ? "admin-crm-filters-seg-btn admin-crm-filters-seg-btn--on" : "admin-crm-filters-seg-btn"}
+                onClick={() => setViewMode("month")}
               >
-                ‹
+                Month
               </button>
+              <button
+                type="button"
+                className={viewMode === "year" ? "admin-crm-filters-seg-btn admin-crm-filters-seg-btn--on" : "admin-crm-filters-seg-btn"}
+                onClick={() => setViewMode("year")}
+              >
+                Whole year
+              </button>
+            </div>
+            <div className="admin-cal-month-picker-wrap">
+              {viewMode === "month" ? (
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-ghost admin-cal-nav-btn"
+                  onClick={() => (month === 0 ? (setMonth(11), setYear((y) => y - 1)) : setMonth((m) => m - 1))}
+                  aria-label="Previous month"
+                >
+                  ‹
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-ghost admin-cal-nav-btn"
+                  onClick={() => setYear((y) => y - 1)}
+                  aria-label="Previous year"
+                >
+                  ‹
+                </button>
+              )}
               <div className="admin-cal-month-picker">
-                <select className="admin-cal-select" value={month} onChange={(e) => setMonth(parseInt(e.target.value, 10))} aria-label="Month">
-                  {MONTHS.map((m, i) => (
-                    <option key={m} value={i}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
+                {viewMode === "month" ? (
+                  <select className="admin-cal-select" value={month} onChange={(e) => setMonth(parseInt(e.target.value, 10))} aria-label="Month">
+                    {MONTHS.map((m, i) => (
+                      <option key={m} value={i}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
                 <select className="admin-cal-select" value={year} onChange={(e) => setYear(parseInt(e.target.value, 10))} aria-label="Year">
-                  {Array.from({ length: 7 }, (_, i) => now.getFullYear() - 2 + i).map((y) => (
+                  {YEAR_OPTIONS.map((y) => (
                     <option key={y} value={y}>
                       {y}
                     </option>
                   ))}
                 </select>
               </div>
-              <button
-                type="button"
-                className="admin-btn admin-btn-ghost admin-cal-nav-btn"
-                onClick={() => (month === 11 ? (setMonth(0), setYear((y) => y + 1)) : setMonth((m) => m + 1))}
-                aria-label="Next month"
-              >
-                ›
-              </button>
+              {viewMode === "month" ? (
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-ghost admin-cal-nav-btn"
+                  onClick={() => (month === 11 ? (setMonth(0), setYear((y) => y + 1)) : setMonth((m) => m + 1))}
+                  aria-label="Next month"
+                >
+                  ›
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-ghost admin-cal-nav-btn"
+                  onClick={() => setYear((y) => y + 1)}
+                  aria-label="Next year"
+                >
+                  ›
+                </button>
+              )}
             </div>
             <button type="button" className="admin-btn admin-btn-ghost" onClick={goToday}>
               Today
@@ -408,10 +610,17 @@ function CalendarPageInner() {
 
       <div className="admin-stats-unified-wrap">
         <AdminStatsCards
-          ariaLabel="Month summary"
+          ariaLabel={viewMode === "year" ? "Year summary" : "Month summary"}
           items={[
-            { label: "Bookings this month", value: stats.totalBookingsCount, variant: "gold" },
-            { label: "Days with bookings", value: stats.bookedDays },
+            {
+              label: viewMode === "year" ? "Bookings this year" : "Bookings this month",
+              value: stats.totalBookingsCount,
+              variant: "gold",
+            },
+            {
+              label: viewMode === "year" ? "Days with bookings" : "Days with bookings",
+              value: stats.bookedDays,
+            },
             { label: "Unavailable", value: stats.closedOnly },
             { label: "Available", value: stats.free, variant: "ok" },
             {
@@ -462,13 +671,72 @@ function CalendarPageInner() {
             </div>
           </div>
           <p className="admin-cal-grid-toolbar-hint">
-            Pick a hall to block or view one room at a time. “All halls” closes the whole venue. Unavailable = manually closed; booked = has a reservation.
+            {viewMode === "year"
+              ? "Whole-year view — click any day to manage it in the panel, or click a month name to zoom into that month. Hall and booking filters apply to the full year."
+              : "Filter the grid by hall. To close days, pick whole venue or a hall in the day panel — labels show on the calendar."}
           </p>
         </section>
         <div className="admin-cal-layout admin-cal-layout--calendar-pair">
         <div className="admin-cal-grid-wrap" ref={calCardRef}>
           {loading ? (
             <p className="admin-lead">Loading…</p>
+          ) : viewMode === "year" ? (
+            <div className="admin-cal-year">
+              {MONTHS.map((monthName, monthIndex) => {
+                const first = new Date(year, monthIndex, 1);
+                const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+                const startDowMonth = first.getDay();
+                const monthDays: string[] = [];
+                for (let d = 1; d <= lastDay; d++) monthDays.push(formatLocalDateParts(year, monthIndex, d));
+                const monthBookings = monthDays.reduce((n, dateStr) => n + (filteredByDate[dateStr]?.length ?? 0), 0);
+                const monthBlocked = monthDays.filter((dateStr) => manualBlocked.has(dateStr)).length;
+                return (
+                  <section key={monthName} className="admin-cal-year-month">
+                    <button
+                      type="button"
+                      className="admin-cal-year-month-head"
+                      onClick={() => openMonth(monthIndex)}
+                    >
+                      <span className="admin-cal-year-month-name">{monthName}</span>
+                      <span className="admin-cal-year-month-meta">
+                        {monthBookings > 0 ? `${monthBookings} booking${monthBookings === 1 ? "" : "s"}` : "No bookings"}
+                        {monthBlocked > 0 ? ` · ${monthBlocked} closed` : ""}
+                      </span>
+                    </button>
+                    <div className="admin-cal-year-mini">
+                      {DOW.map((d) => (
+                        <span key={`${monthName}-${d}`} className="admin-cal-year-dow">
+                          {d.charAt(0)}
+                        </span>
+                      ))}
+                      {Array.from({ length: startDowMonth }, (_, i) => (
+                        <span key={`e-${monthName}-${i}`} className="admin-cal-year-cell admin-cal-year-cell--empty" />
+                      ))}
+                      {monthDays.map((dateStr, idx) => {
+                        const bookings = filteredByDate[dateStr] ?? [];
+                        const cell = getDayCellState(dateStr, bookings, manualBlocks, halls, hallFilter, manualBlocked);
+                        const isSel = selected === dateStr;
+                        const today = isToday(dateStr);
+                        return (
+                          <button
+                            key={`${year}-${monthIndex}-${idx}`}
+                            type="button"
+                            title={[dateStr, cell.blockLabel].filter(Boolean).join(" · ")}
+                            onClick={() => {
+                              setSelected(dateStr);
+                              if (!rangeEnd) setRangeEnd(dateStr);
+                            }}
+                            className={`admin-cal-year-cell admin-cal-year-cell--${cell.kind} ${isSel ? "admin-cal-year-cell--selected" : ""} ${today ? "admin-cal-year-cell--today" : ""}`}
+                          >
+                            {parseInt(dateStr.slice(8, 10), 10)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
           ) : (
             <div className="admin-cal-grid">
               {DOW.map((d) => (
@@ -481,30 +749,30 @@ function CalendarPageInner() {
               ))}
               {days.map(({ d, dateStr }, idx) => {
                 const bookings = filteredByDate[dateStr] ?? [];
-                const hasBooking = bookings.length > 0;
-                const manual = manualBlocked.has(dateStr);
+                const cell = getDayCellState(dateStr, bookings, manualBlocks, halls, hallFilter, manualBlocked);
                 const isSel = selected === dateStr;
                 const today = isToday(dateStr);
                 return (
                   <button
                     key={`${year}-${month}-${d}-${idx}`}
                     type="button"
+                    title={[dateStr, cell.blockLabel].filter(Boolean).join(" · ")}
                     onClick={() => {
                       setSelected(dateStr);
                       if (!rangeEnd) setRangeEnd(dateStr);
                     }}
-                    className={`admin-cal-cell ${hasBooking ? "admin-cal-cell--booked" : manual ? "admin-cal-cell--blocked" : "admin-cal-cell--free"} ${isSel ? "admin-cal-cell--selected" : ""} ${today ? "admin-cal-cell--today" : ""}`}
+                    className={`admin-cal-cell admin-cal-cell--${cell.kind} ${isSel ? "admin-cal-cell--selected" : ""} ${today ? "admin-cal-cell--today" : ""}`}
                   >
                     <span className="admin-cal-daynum">{d}</span>
                     {today ? <span className="admin-cal-today-dot" aria-hidden /> : null}
-                    {hasBooking && bookings.length === 1 && (
+                    {cell.kind === "booked" && bookings.length === 1 && (
                       <div className="admin-cal-cell-slots" aria-hidden>
                         <span className="admin-cal-cell-slot-dot" title={bookings[0].event_slot_label || "Full day"}>
                           {(bookings[0].event_slot_label || "All day").split("·")[0].trim().slice(0, 4)}
                         </span>
                       </div>
                     )}
-                    {hasBooking && bookings.length > 1 && (
+                    {cell.kind === "booked" && bookings.length > 1 && (
                       <div className="admin-cal-cell-slots">
                         {bookings.slice(0, 4).map((b) => (
                           <span key={b.id} className="admin-cal-cell-slot-dot" title={b.event_slot_label || "Full day"}>
@@ -513,8 +781,12 @@ function CalendarPageInner() {
                         ))}
                       </div>
                     )}
-                    {hasBooking && <span className="admin-cal-pill admin-cal-pill--booked">{bookings.length}</span>}
-                    {!hasBooking && manual && <span className="admin-cal-pill admin-cal-pill--blocked">Off</span>}
+                    {cell.kind === "booked" && <span className="admin-cal-pill admin-cal-pill--booked">{bookings.length}</span>}
+                    {(cell.kind === "blocked" || cell.kind === "partial") && cell.blockLabel ? (
+                      <span className={`admin-cal-pill admin-cal-pill--blocked ${cell.kind === "partial" ? "admin-cal-pill--partial" : ""}`}>
+                        {cell.blockLabel.length > 14 ? `${cell.blockLabel.slice(0, 13)}…` : cell.blockLabel}
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
@@ -524,6 +796,7 @@ function CalendarPageInner() {
             <span className="admin-cal-legend-i admin-cal-legend-free">Available</span>
             <span className="admin-cal-legend-i admin-cal-legend-booked">Booked</span>
             <span className="admin-cal-legend-i admin-cal-legend-blocked">Unavailable</span>
+            <span className="admin-cal-legend-i admin-cal-legend-partial">Part closed</span>
             <span className="admin-cal-legend-i admin-cal-legend-today">Today</span>
           </div>
         </div>
@@ -531,11 +804,7 @@ function CalendarPageInner() {
         <aside
           className={`admin-cal-sidebar${sidebarMatchedH != null ? " admin-cal-sidebar--match-calendar" : ""}`}
           aria-label="Selected day panel"
-          style={
-            sidebarMatchedH != null
-              ? { height: sidebarMatchedH, maxHeight: sidebarMatchedH, minHeight: sidebarMatchedH }
-              : undefined
-          }
+          style={sidebarMatchedH != null ? { maxHeight: Math.max(sidebarMatchedH, 520) } : undefined}
         >
           {selected ? (
             <>
@@ -552,6 +821,74 @@ function CalendarPageInner() {
               </header>
 
               <div className="admin-cal-sidebar-body">
+              <p className="admin-cal-sidebar-scroll-hint">Scroll for full day details, hall status, and bookings.</p>
+
+              <section className="admin-cal-hall-status" aria-label="Hall availability on this day">
+                <h4 className="admin-cal-sidebar-heading">Halls on this day</h4>
+                <p className="admin-cal-hall-status-hint">Close or open whole venue or one hall — each row shows what is booked or blocked.</p>
+                <ul className="admin-cal-hall-status-list">
+                  {hallDayRows.map((row) => (
+                    <li
+                      key={row.key}
+                      className={`admin-cal-hall-status-row admin-cal-hall-status-row--${row.status.toLowerCase()}`}
+                    >
+                      <div className="admin-cal-hall-status-main">
+                        <strong>{row.label}</strong>
+                        <span className="admin-cal-hall-status-badge">{row.status}</span>
+                        {row.bookings.length > 0 ? (
+                          <span className="admin-cal-hall-status-bookings">
+                            {row.bookings.map((b) => b.client_name || b.client_email).join(", ")}
+                          </span>
+                        ) : row.blockNote ? (
+                          <span className="admin-cal-hall-status-note">Note: {row.blockNote}</span>
+                        ) : null}
+                      </div>
+                      <div className="admin-cal-hall-status-actions">
+                        {row.bookings.length > 0 ? (
+                          <span className="admin-cal-hall-status-note">Has booking</span>
+                        ) : row.blocked ? (
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-ghost admin-btn-sm"
+                            onClick={() => toggleDay(selected!, row.bookings.length > 0, true, row.spaceId)}
+                          >
+                            Open
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-ghost admin-btn-sm"
+                            onClick={() => toggleDay(selected!, row.bookings.length > 0, false, row.spaceId)}
+                          >
+                            Close
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              <section className="admin-cal-day-note" aria-label="Staff day note">
+                <h4 className="admin-cal-sidebar-heading">Staff note</h4>
+                <p className="admin-cal-hall-status-hint">Internal only — not shown on the public calendar. Use for reminders, setup, or closure reasons.</p>
+                <textarea
+                  className="admin-cal-day-note-input"
+                  rows={3}
+                  value={dayNote}
+                  onChange={(e) => setDayNote(e.target.value)}
+                  placeholder="e.g. Hall Two closed for maintenance — Hall One still available for enquiries"
+                />
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-ghost admin-btn-sm"
+                  disabled={dayNoteSaving}
+                  onClick={() => void saveDayNote()}
+                >
+                  {dayNoteSaving ? "Saving…" : "Save note"}
+                </button>
+              </section>
+
               {slotsLoading ? (
                 <div className="admin-cal-slots-panel admin-cal-slots-panel--loading">
                   <div className="admin-cal-slots-shimmer" />
@@ -633,67 +970,73 @@ function CalendarPageInner() {
               ) : null}
 
               <div
-                className={`admin-cal-sidebar-summary ${selectedHasBooking ? "admin-cal-sidebar-summary--booked" : selectedManual ? "admin-cal-sidebar-summary--blocked" : "admin-cal-sidebar-summary--free"}`}
+                className={`admin-cal-sidebar-summary ${selectedDayAllBookings.length ? "admin-cal-sidebar-summary--booked" : selectedBlockInfo.wholeVenue || selectedBlockInfo.hallIds.length ? "admin-cal-sidebar-summary--blocked" : "admin-cal-sidebar-summary--free"}`}
                 aria-label="Day summary"
               >
                 <span className="admin-cal-sidebar-summary-count">
-                  {selectedBookings.length === 0 ? "No bookings" : `${selectedBookings.length} ${selectedBookings.length === 1 ? "booking" : "bookings"}`}
+                  {selectedDayAllBookings.length === 0
+                    ? "No bookings"
+                    : `${selectedDayAllBookings.length} ${selectedDayAllBookings.length === 1 ? "booking" : "bookings"}`}
                 </span>
                 <span className="admin-cal-sidebar-summary-status">
-                  {selectedHasBooking ? "Booked" : selectedManual ? "Unavailable" : "Available"}
+                  {selectedDayAllBookings.length
+                    ? "Booked"
+                    : selectedBlockInfo.wholeVenue
+                      ? "Whole venue closed"
+                      : selectedBlockInfo.hallIds.length
+                        ? blockLabelForDate(manualBlocks, selected!, halls) ?? "Part closed"
+                        : "Available"}
                 </span>
               </div>
 
-              {selectedHasBooking && activeBooking && (
-                <section className="admin-cal-sidebar-bookings" aria-label="Reservations">
+              {selectedDayAllBookings.length > 0 && (
+                <section className="admin-cal-sidebar-bookings admin-cal-sidebar-bookings--detail" aria-label="All reservations">
                   <h4 className="admin-cal-sidebar-heading">
-                    {selectedBookings.length > 1 ? "Booking on this day" : "Reservation"}
-                    <span className="admin-cal-sidebar-heading-count">{selectedBookings.length}</span>
+                    Bookings
+                    <span className="admin-cal-sidebar-heading-count">{selectedDayAllBookings.length}</span>
                   </h4>
-                  {selectedBookings.length > 1 ? (
-                    <div className="admin-cal-sidebar-booking-tabs">
-                      <label className="admin-cal-sidebar-booking-tabs-label" htmlFor="cal-booking-tab">
-                        Select booking
-                      </label>
-                      <select
-                        id="cal-booking-tab"
-                        className="admin-cal-sidebar-booking-tabs-select"
-                        value={activeBookingId ?? ""}
-                        onChange={(e) => setActiveBookingId(e.target.value)}
-                        aria-label="Select booking for this date"
-                      >
-                        {selectedBookings.map((b, i) => (
-                          <option key={b.id} value={b.id}>
-                            {i + 1}. {b.client_name || b.client_email || b.id.slice(0, 8)} — {b.status}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : null}
-                  <ul className="admin-cal-sidebar-booking-list">
-                    <li key={activeBooking.id} className="admin-cal-sidebar-booking">
-                      <div className="admin-cal-sidebar-booking-trigger" style={{ cursor: "default", flexWrap: "wrap" }}>
-                        <span className="admin-cal-sidebar-booking-avatar" aria-hidden>
-                          {(activeBooking.client_name || activeBooking.client_email || "?").charAt(0).toUpperCase()}
-                        </span>
-                        <span className="admin-cal-sidebar-booking-info">
-                          <span className="admin-cal-sidebar-booking-name">{activeBooking.client_name || activeBooking.client_email}</span>
-                          <span className={`admin-cal-sidebar-booking-badge admin-cal-sidebar-booking-badge--${activeBooking.status}`}>{activeBooking.status}</span>
-                          <span className="admin-cal-sidebar-booking-slotline">Customer&apos;s time</span>
-                          <span className="admin-cal-sidebar-booking-time" style={{ flexBasis: "100%", marginTop: "0.2rem" }}>
-                            {activeBooking.event_slot_label || "Full venue (whole day)"}
+                  <ul className="admin-cal-sidebar-booking-detail-list">
+                    {selectedDayAllBookings.map((b) => (
+                      <li key={b.id} className="admin-cal-sidebar-booking-detail">
+                        <div className="admin-cal-sidebar-booking-detail-head">
+                          <span className="admin-cal-sidebar-booking-name">{b.client_name || b.client_email}</span>
+                          <span className={`admin-cal-sidebar-booking-badge admin-cal-sidebar-booking-badge--${b.status}`}>
+                            {b.status}
                           </span>
-                          {activeBooking.hall_label ? (
-                            <span className="admin-cal-sidebar-booking-time" style={{ flexBasis: "100%", opacity: 0.85 }}>
-                              {activeBooking.hall_label}
-                            </span>
+                        </div>
+                        <dl className="admin-cal-sidebar-booking-dl">
+                          <div>
+                            <dt>Email</dt>
+                            <dd>{b.client_email}</dd>
+                          </div>
+                          {b.hall_label ? (
+                            <div>
+                              <dt>Hall / suite</dt>
+                              <dd>{b.hall_label}</dd>
+                            </div>
                           ) : null}
-                        </span>
-                      </div>
-                      <Link href={`/admin/bookings/${activeBooking.id}`} className="admin-btn admin-btn-sm admin-btn-primary admin-cal-sidebar-viewbtn">
-                        View
-                      </Link>
-                    </li>
+                          <div>
+                            <dt>Time slot</dt>
+                            <dd>{b.event_slot_label || "Full venue (whole day)"}</dd>
+                          </div>
+                          {b.event_type ? (
+                            <div>
+                              <dt>Event type</dt>
+                              <dd>{b.event_type}</dd>
+                            </div>
+                          ) : null}
+                          {b.package_name ? (
+                            <div>
+                              <dt>Package</dt>
+                              <dd>{b.package_name}</dd>
+                            </div>
+                          ) : null}
+                        </dl>
+                        <Link href={`/admin/bookings/${b.id}`} className="admin-btn admin-btn-sm admin-btn-primary admin-cal-sidebar-viewbtn">
+                          Open booking
+                        </Link>
+                      </li>
+                    ))}
                   </ul>
                 </section>
               )}
@@ -702,18 +1045,53 @@ function CalendarPageInner() {
                 <Link href={`/admin/bookings/new?date=${selected}`} className="admin-cal-sidebar-cta">
                   Create booking for this date
                 </Link>
-                <div className="admin-cal-sidebar-day-actions">
-                  {!selectedHasBooking && selectedManual && (
-                    <button type="button" className="admin-cal-sidebar-day-btn" onClick={() => toggleDay(selected, false, true)}>
-                      Mark available
-                    </button>
-                  )}
-                  {!selectedHasBooking && !selectedManual && (
-                    <button type="button" className="admin-cal-sidebar-day-btn" onClick={() => toggleDay(selected, false, false)}>
-                      Mark unavailable
-                    </button>
-                  )}
-                </div>
+                <section className="admin-cal-sidebar-block-target" aria-label="Close or open">
+                  <label className="admin-cal-sidebar-block-target-label">
+                    <span>Close / open for</span>
+                    <select
+                      className="admin-cal-select admin-cal-sidebar-block-select"
+                      value={blockTarget}
+                      onChange={(e) => setBlockTarget(e.target.value)}
+                    >
+                      <option value="whole">Whole venue (all halls)</option>
+                      {halls.map((h) => (
+                        <option key={h.id} value={h.id}>
+                          {h.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="admin-cal-sidebar-block-target-label">
+                    <span>Block note (optional, staff only)</span>
+                    <input
+                      className="admin-cal-sidebar-range-input"
+                      value={blockNote}
+                      onChange={(e) => setBlockNote(e.target.value)}
+                      placeholder="e.g. Private viewing — Hall One only"
+                    />
+                  </label>
+                  <div className="admin-cal-sidebar-day-actions">
+                    {hasBookingForBlockTarget ? (
+                      <p className="admin-cal-sidebar-block-note">This hall / day has a booking — open the booking to change.</p>
+                    ) : selectedTargetBlocked ? (
+                      <button
+                        type="button"
+                        className="admin-cal-sidebar-day-btn"
+                        onClick={() => toggleDay(selected!, false, true, blockSpaceId)}
+                      >
+                        Mark available ({closeTargetLabel})
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="admin-cal-sidebar-day-btn"
+                        onClick={() => toggleDay(selected!, false, false, blockSpaceId)}
+                      >
+                        Mark unavailable ({closeTargetLabel})
+                      </button>
+                    )}
+                  </div>
+                </section>
               </div>
 
               <section className="admin-cal-sidebar-range" aria-label="Multi-day range">
@@ -746,32 +1124,31 @@ function CalendarPageInner() {
 
       <section className="admin-cal-agenda">
         <div className="admin-cal-agenda-head">
-          <h3 className="admin-cal-agenda-title">This month — all bookings ({stats.totalBookingsCount})</h3>
+          <h3 className="admin-cal-agenda-title">
+            {viewMode === "year" ? `This year — all bookings (${stats.totalBookingsCount})` : `This month — all bookings (${stats.totalBookingsCount})`}
+          </h3>
           <button type="button" className="admin-btn admin-btn-sm admin-btn-ghost" onClick={load}>
             Refresh
           </button>
         </div>
-        {Object.keys(bookingsByDate).length === 0 ? (
-          <p className="admin-cal-agenda-empty">No bookings in this month.</p>
+        {agendaBookings.length === 0 ? (
+          <p className="admin-cal-agenda-empty">{viewMode === "year" ? "No bookings in this year." : "No bookings in this month."}</p>
         ) : (
           <ul className="admin-cal-agenda-list">
-            {Object.entries(bookingsByDate)
-              .sort(([a], [b]) => a.localeCompare(b))
-              .flatMap(([dateStr, list]) => list.map((b) => ({ dateStr, ...b })))
-              .map((b) => (
-                <li key={b.id}>
-                  <span className="admin-cal-agenda-date">{b.dateStr}</span>
-                  <span>
-                    {b.client_name || b.client_email}
-                    {b.hall_label ? <span className="admin-cal-agenda-slot"> · {b.hall_label}</span> : null}
-                    {b.event_slot_label ? <span className="admin-cal-agenda-slot"> · {b.event_slot_label}</span> : null}
-                  </span>
-                  <span className="admin-cal-agenda-status">{b.status}</span>
-                  <Link href={`/admin/bookings/${b.id}`} className="admin-btn admin-btn-sm admin-btn-primary">
-                    View
-                  </Link>
-                </li>
-              ))}
+            {agendaBookings.map((b) => (
+              <li key={b.id}>
+                <span className="admin-cal-agenda-date">{b.dateStr}</span>
+                <span>
+                  {b.client_name || b.client_email}
+                  {b.hall_label ? <span className="admin-cal-agenda-slot"> · {b.hall_label}</span> : null}
+                  {b.event_slot_label ? <span className="admin-cal-agenda-slot"> · {b.event_slot_label}</span> : null}
+                </span>
+                <span className="admin-cal-agenda-status">{b.status}</span>
+                <Link href={`/admin/bookings/${b.id}`} className="admin-btn admin-btn-sm admin-btn-primary">
+                  View
+                </Link>
+              </li>
+            ))}
           </ul>
         )}
       </section>

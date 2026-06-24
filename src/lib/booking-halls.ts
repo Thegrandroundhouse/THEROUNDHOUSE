@@ -8,7 +8,7 @@ export type VenueHall = {
   sort_order: number;
 };
 
-export type CalendarBlockRow = { date: string; space_id: string | null };
+export type CalendarBlockRow = { date: string; space_id: string | null; block_note?: string | null };
 
 export async function listVenueHalls(supabase: SupabaseClient): Promise<VenueHall[]> {
   const { data } = await supabase
@@ -63,7 +63,7 @@ export async function loadCalendarBlocks(
 ): Promise<CalendarBlockRow[]> {
   const { data } = await supabase
     .from("venue_calendar")
-    .select("date, space_id")
+    .select("date, space_id, block_note")
     .gte("date", start)
     .lte("date", end)
     .eq("is_booked", true)
@@ -71,6 +71,7 @@ export async function loadCalendarBlocks(
   return (data ?? []).map((r) => ({
     date: r.date as string,
     space_id: (r.space_id as string | null) ?? null,
+    block_note: (r.block_note as string | null) ?? null,
   }));
 }
 
@@ -158,6 +159,7 @@ export async function upsertCalendarBlock(
   supabase: SupabaseClient,
   date: string,
   spaceId: string | null,
+  blockNote?: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
   let del = supabase.from("venue_calendar").delete().eq("date", date).is("booking_id", null);
   if (spaceId) del = del.eq("space_id", spaceId);
@@ -168,6 +170,7 @@ export async function upsertCalendarBlock(
     space_id: spaceId,
     is_booked: true,
     booking_id: null,
+    block_note: blockNote?.trim() || null,
     updated_at: new Date().toISOString(),
   });
   return error ? { ok: false, error: error.message } : { ok: true };
@@ -182,4 +185,56 @@ export async function removeCalendarBlock(
   if (spaceId) q = q.eq("space_id", spaceId);
   else q = q.is("space_id", null);
   await q;
+}
+
+export type DayBlockInfo = {
+  wholeVenue: boolean;
+  hallIds: string[];
+};
+
+export function blocksForDate(blocks: CalendarBlockRow[], date: string): DayBlockInfo {
+  const day = blocks.filter((b) => b.date === date);
+  return {
+    wholeVenue: day.some((b) => b.space_id == null),
+    hallIds: [...new Set(day.filter((b) => b.space_id).map((b) => b.space_id as string))],
+  };
+}
+
+export function blockLabelForDate(blocks: CalendarBlockRow[], date: string, halls: VenueHall[]): string | null {
+  const info = blocksForDate(blocks, date);
+  if (info.wholeVenue) return "Whole venue";
+  if (!info.hallIds.length) return null;
+  if (info.hallIds.length === 1) {
+    return halls.find((h) => h.id === info.hallIds[0])?.name ?? "1 hall";
+  }
+  const names = info.hallIds
+    .map((id) => halls.find((h) => h.id === id)?.name)
+    .filter(Boolean) as string[];
+  if (names.length <= 2) return names.join(" + ");
+  return `${names.length} halls`;
+}
+
+/** In combined view: none, some halls, or fully closed. */
+export function dayBlockLevel(
+  blocks: CalendarBlockRow[],
+  date: string,
+  allHallIds: string[],
+): "none" | "partial" | "full" {
+  const info = blocksForDate(blocks, date);
+  if (info.wholeVenue) return "full";
+  if (!info.hallIds.length) return "none";
+  if (!allHallIds.length) return info.hallIds.length ? "partial" : "none";
+  if (allHallIds.every((id) => info.hallIds.includes(id))) return "full";
+  return "partial";
+}
+
+export function isHallBlockedOnDate(
+  blocks: CalendarBlockRow[],
+  date: string,
+  spaceId: string | null,
+): boolean {
+  const info = blocksForDate(blocks, date);
+  if (info.wholeVenue) return true;
+  if (spaceId == null) return info.wholeVenue;
+  return info.hallIds.includes(spaceId);
 }

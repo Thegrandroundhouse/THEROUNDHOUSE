@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { loadCalendarOverview } from "@/lib/admin-calendar-overview";
-import { monthBoundsLocal } from "@/lib/local-date";
+import { formatLocalDateParts } from "@/lib/local-date";
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -11,21 +11,26 @@ function getAdminClient() {
   return createClient(url, key);
 }
 
-/** GET: month overview — bookings per date, manual blocks, halls */
+function yearBoundsLocal(year: number): { start: string; end: string } {
+  return {
+    start: formatLocalDateParts(year, 0, 1),
+    end: formatLocalDateParts(year, 11, 31),
+  };
+}
+
+/** GET: full-year overview — bookings per date, manual blocks, halls */
 export async function GET(request: NextRequest) {
   const authUser = await getAuthUserFromRequest(request);
   if (!authUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const y = parseInt(request.nextUrl.searchParams.get("year") || String(new Date().getFullYear()), 10);
-  const m = parseInt(request.nextUrl.searchParams.get("month") || String(new Date().getMonth()), 10);
   const supabase = getAdminClient();
   if (!supabase) return NextResponse.json({ error: "Not configured" }, { status: 500 });
 
-  const { start, end } = monthBoundsLocal(y, m);
+  const { start, end } = yearBoundsLocal(y);
   const overview = await loadCalendarOverview(supabase, start, end);
 
   return NextResponse.json({
     year: y,
-    month: m,
     ...overview,
   });
 }

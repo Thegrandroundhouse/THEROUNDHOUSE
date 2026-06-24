@@ -65,7 +65,7 @@ export async function POST(request: Request) {
         results.push({ date: d, ok: false, skip: "has_booking" });
         continue;
       }
-      const res = await upsertCalendarBlock(supabase, d, spaceId);
+      const res = await upsertCalendarBlock(supabase, d, spaceId, typeof body.block_note === "string" ? body.block_note : undefined);
       results.push({ date: d, ok: res.ok, skip: res.error });
     }
     return NextResponse.json({ ok: true, action: "block", results, dates: dates.length, space_id: spaceId });
