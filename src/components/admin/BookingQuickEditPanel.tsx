@@ -119,6 +119,16 @@ export function BookingQuickEditPanel({
                 autoComplete="tel"
               />
             </label>
+            <label className="admin-bkd-quick-field admin-bkd-quick-field--full">
+              <span>Address</span>
+              <textarea
+                className="admin-bk-simple-input"
+                rows={2}
+                value={form.client_address ?? ""}
+                onChange={(e) => setForm((f) => ({ ...f, client_address: e.target.value }))}
+                placeholder="For the hire contract PDF"
+              />
+            </label>
           </div>
         </div>
 

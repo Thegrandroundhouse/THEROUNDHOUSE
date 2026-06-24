@@ -229,6 +229,7 @@ export async function POST(request: Request) {
       client_name: body.client_name ?? null,
       client_email: body.client_email,
       client_phone: body.client_phone ?? null,
+      client_address: body.client_address ?? null,
       event_date: body.event_date,
       event_slot_key,
       event_type: body.event_type ?? null,

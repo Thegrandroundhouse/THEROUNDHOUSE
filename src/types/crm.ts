@@ -28,6 +28,7 @@ export interface Booking {
   client_name: string | null;
   client_email: string;
   client_phone: string | null;
+  client_address: string | null;
   event_date: string;
   /** Time slot key, or null = full-venue / whole day */
   event_slot_key?: string | null;

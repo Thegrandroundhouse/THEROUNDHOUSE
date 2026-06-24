@@ -657,6 +657,12 @@ export function AgreementGeneratePanel({
                 <dt>Client</dt>
                 <dd>{draft.client.name || "—"}</dd>
               </div>
+              {draft.client.address ? (
+                <div>
+                  <dt>Address</dt>
+                  <dd>{draft.client.address}</dd>
+                </div>
+              ) : null}
               <div>
                 <dt>Event date</dt>
                 <dd>{draft.event.dateLabel || "—"}</dd>

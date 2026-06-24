@@ -315,6 +315,7 @@ export default function BookingDetailPage() {
           client_name: data.client_name ?? "",
           client_email: data.client_email ?? "",
           client_phone: data.client_phone ?? "",
+          client_address: data.client_address ?? "",
           event_date: data.event_date ?? "",
           event_type: data.event_type ?? "",
           package_name: data.package_name ?? "",

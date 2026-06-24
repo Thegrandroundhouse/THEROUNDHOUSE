@@ -45,7 +45,7 @@ export async function PATCH(
   if (!supabase) return NextResponse.json({ error: "Server not configured" }, { status: 500 });
   const { data: before } = await supabase.from("bookings").select("*").eq("id", id).maybeSingle();
   const allowed = [
-    "client_name", "client_email", "client_phone", "event_date", "event_type",
+    "client_name", "client_email", "client_phone", "client_address", "event_date", "event_type",
     "package_name", "package_id", "status", "total_cents", "deposit_cents", "balance_cents",
     "special_requirements", "notes", "extras",
   ];

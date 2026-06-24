@@ -351,7 +351,7 @@ export async function buildBanquetingContract(
       name: String(booking.client_name || "Client"),
       phone: overrides.clientPhone || String(booking.client_phone || ""),
       email: String(booking.client_email || ""),
-      address: overrides.clientAddress || "",
+      address: overrides.clientAddress || String(booking.client_address || "").trim(),
     },
     event: {
       dateLabel: formatEventDate(booking.event_date as string),

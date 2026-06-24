@@ -88,6 +88,7 @@ function NewBookingForm() {
     client_name: "",
     client_email: "",
     client_phone: "",
+    client_address: "",
     event_date: "",
     event_type: "",
     package_name: "",
@@ -379,6 +380,7 @@ function NewBookingForm() {
           client_name: form.client_name || null,
           client_email: form.client_email,
           client_phone: form.client_phone || null,
+          client_address: form.client_address.trim() || null,
           event_date: form.event_date,
           event_type: form.event_type || null,
           package_name: form.package_name || null,
@@ -474,6 +476,16 @@ function NewBookingForm() {
             <div className="admin-form-group admin-form-full">
               <label>Phone</label>
               <input className="admin-bk-simple-input" type="tel" value={form.client_phone} onChange={(e) => setForm((f) => ({ ...f, client_phone: e.target.value }))} placeholder="07…" />
+            </div>
+            <div className="admin-form-group admin-form-full">
+              <label>Address</label>
+              <textarea
+                className="admin-bk-simple-input"
+                rows={2}
+                value={form.client_address}
+                onChange={(e) => setForm((f) => ({ ...f, client_address: e.target.value }))}
+                placeholder="Client address — appears on the hire contract PDF"
+              />
             </div>
           </div>
         </section>
