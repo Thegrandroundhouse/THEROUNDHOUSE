@@ -1,6 +1,6 @@
-# The Grand Roundhouse — Wedding Venue Website
+# The Grand Round House — Wedding Venue Website
 
-A full-stack wedding venue website for **The Grand Roundhouse**, with a venue availability calendar, booking management, and admin/staff dashboards. Stack: **Next.js**, **Node.js**, **Supabase** (Auth, Postgres, Storage).
+A full-stack wedding venue website for **The Grand Round House**, with a venue availability calendar, booking management, and admin/staff dashboards. Stack: **Next.js**, **Node.js**, **Supabase** (Auth, Postgres, Storage).
 
 ---
 
@@ -157,4 +157,4 @@ Private / All rights reserved (or add your chosen license).
 
 ---
 
-**The Grand Roundhouse** — Wedding venue website. Next.js + Node.js + Supabase.
+**The Grand Round House** — Wedding venue website. Next.js + Node.js + Supabase.

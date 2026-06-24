@@ -1,4 +1,4 @@
-# CRM & admin — full guide (The Grand Roundhouse)
+# CRM & admin — full guide (The Grand Round House)
 
 Everything under **`/admin`** after login. The **sidebar** is the main map; this doc mirrors **every page** and how it fits together.
 

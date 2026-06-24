@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Décor – The Grand Roundhouse",
-  description: "Luxury décor and production exclusive to The Grand Roundhouse. Imagine, Inspire, Design, Deliver.",
+  title: "Décor – The Grand Round House",
+  description: "Luxury décor and production exclusive to The Grand Round House. Imagine, Inspire, Design, Deliver.",
 };
 
 export default function DecorPage() {
@@ -14,7 +14,7 @@ export default function DecorPage() {
         <h1 className="page-title mt-2">Décor</h1>
         <div className="divider-gold mt-4" />
         <p className="page-lead mt-4">
-          Our luxury décor and production partner is exclusive to The Grand Roundhouse. Inspired by your dreams — Imagine, Inspire, Design, Deliver.
+          Our luxury décor and production partner is exclusive to The Grand Round House. Inspired by your dreams — Imagine, Inspire, Design, Deliver.
         </p>
         <p className="page-body mt-6 max-w-3xl">
           We start with your imagination to create themes, concepts and mood boards. Every detail is designed to make your event stand out in the most breathtaking way.

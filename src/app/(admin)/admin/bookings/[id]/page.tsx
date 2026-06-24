@@ -14,6 +14,7 @@ import { AgreementGeneratePanel } from "@/components/admin/AgreementGeneratePane
 import { BookingSummaryOverview } from "@/components/admin/BookingSummaryOverview";
 import { defaultInstalmentCents } from "@/lib/booking-payment-setup";
 import { AgreementPdfPreviewModal, useAgreementPdfPreview } from "@/components/admin/AgreementPdfPreviewModal";
+import { SendAgreementEmailModal, type SendAgreementEmailDefaults } from "@/components/admin/SendAgreementEmailModal";
 import { parseContractData } from "@/lib/build-banqueting-contract";
 import { minSelectableEventDateYYYYMMDD } from "@/lib/min-event-date";
 import {
@@ -21,6 +22,16 @@ import {
   isEventDateInFutureLondon,
 } from "@/lib/booking-status-rules";
 import { bookingMoneyFromLedger } from "@/lib/booking-money-summary";
+
+type BookingAgreementRow = {
+  id: string;
+  title: string | null;
+  rendered_body: string;
+  custom_values?: unknown;
+  client_signed_at: string | null;
+  venue_signed_at: string | null;
+  created_at?: string;
+};
 
 const STATUS_OPTIONS: BookingStatus[] = ["pending", "confirmed", "cancelled", "completed"];
 const STATUS_LABELS: Record<BookingStatus, string> = {
@@ -169,20 +180,16 @@ export default function BookingDetailPage() {
   const [packagesList, setPackagesList] = useState<{ id: string; name: string; base_price_cents: number | null }[]>([]);
   const [slotDefs, setSlotDefs] = useState<{ key: string; label: string; timeLabel: string }[]>([]);
   const [agreementTemplates, setAgreementTemplates] = useState<{ id: string; name: string; slug: string; is_preferred: boolean }[]>([]);
-  const [bookingAgreements, setBookingAgreements] = useState<
-    {
-      id: string;
-      title: string | null;
-      rendered_body: string;
-      custom_values?: unknown;
-      client_signed_at: string | null;
-      venue_signed_at: string | null;
-      created_at?: string;
-    }[]
-  >([]);
+  const [bookingAgreements, setBookingAgreements] = useState<BookingAgreementRow[]>([]);
   const [agreementsMigration, setAgreementsMigration] = useState(false);
   const [signSaving, setSignSaving] = useState<string | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("overview");
+  const [emailAgreement, setEmailAgreement] = useState<BookingAgreementRow | null>(null);
+  const [venueBusiness, setVenueBusiness] = useState<{
+    venueName?: string;
+    venuePhone?: string;
+    venueEmail?: string;
+  } | null>(null);
   const agreementPreview = useAgreementPdfPreview();
 
   const loadPayments = useCallback(() => {
@@ -289,6 +296,15 @@ export default function BookingDetailPage() {
       setSetupPaymentsLoading(false);
     }
   };
+
+  useEffect(() => {
+    adminFetch("/api/admin/settings/invoice-business")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { venueName?: string; venuePhone?: string; venueEmail?: string } | null) => {
+        if (d) setVenueBusiness({ venueName: d.venueName, venuePhone: d.venuePhone, venueEmail: d.venueEmail });
+      })
+      .catch(() => setVenueBusiness(null));
+  }, []);
 
   useEffect(() => {
     adminFetch(`/api/admin/bookings/${id}`)
@@ -574,7 +590,34 @@ export default function BookingDetailPage() {
     return res.blob();
   };
 
-  type AgreementRow = (typeof bookingAgreements)[0];
+  type AgreementRow = BookingAgreementRow;
+
+  function agreementEmailDefaults(a: BookingAgreementRow): SendAgreementEmailDefaults {
+    const contract = parseContractData(a.custom_values);
+    const eventDate = form.event_date || booking?.event_date || "";
+    const eventDateLabel = eventDate
+      ? new Date(eventDate + "T12:00:00").toLocaleDateString("en-GB", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })
+      : "—";
+    const totalCents = poundsInputToCents(totalPounds) ?? booking?.total_cents ?? null;
+    return {
+      clientName: String(form.client_name || booking?.client_name || booking?.client_email || "Client"),
+      clientEmail: String(form.client_email || booking?.client_email || ""),
+      eventDateLabel,
+      bookingCode: (booking as Booking & { booking_code?: string | null })?.booking_code ?? null,
+      agreementTitle: a.title || "Hire agreement",
+      venueName: venueBusiness?.venueName,
+      venuePhone: venueBusiness?.venuePhone,
+      venueEmail: venueBusiness?.venueEmail,
+      salesRep:
+        contract?.enquiry.salesRep && contract.enquiry.salesRep !== "—" ? contract.enquiry.salesRep : undefined,
+      totalGbp: totalCents != null ? formatPounds(totalCents) : undefined,
+    };
+  }
 
   function agreementPrintChecklist(a: AgreementRow): string {
     const contract = parseContractData(a.custom_values);
@@ -738,6 +781,16 @@ export default function BookingDetailPage() {
         bookingId={id}
         onCreated={() => setReminderOpen(false)}
       />
+      {emailAgreement ? (
+        <SendAgreementEmailModal
+          open
+          onClose={() => setEmailAgreement(null)}
+          bookingId={id}
+          agreementId={emailAgreement.id}
+          defaults={agreementEmailDefaults(emailAgreement)}
+          onSent={() => loadWorkspace()}
+        />
+      ) : null}
 
       <div className="admin-bkd-banner">
         <div className="admin-bkd-top-actions">
@@ -1021,6 +1074,13 @@ export default function BookingDetailPage() {
                           </td>
                           <td>
                             <div className="admin-bkd-agreement-actions admin-bws-agreement-actions">
+                              <button
+                                type="button"
+                                className="admin-btn admin-btn-primary admin-btn-sm"
+                                onClick={() => setEmailAgreement(a)}
+                              >
+                                Email
+                              </button>
                               <button
                                 type="button"
                                 className="admin-btn admin-btn-secondary admin-btn-sm"

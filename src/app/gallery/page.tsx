@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { GalleryGrid } from "@/components/gallery/GalleryGrid";
 
 export const metadata: Metadata = {
-  title: "Gallery – The Grand Roundhouse",
+  title: "Gallery – The Grand Round House",
   description: "Photo and video gallery. Testimonials and wedding setups.",
 };
 

@@ -1,15 +1,15 @@
 /**
- * Official T&C sections — The Roundhouse Banqueting Limited (from signed PDF).
+ * Official T&C sections — The Grand Round House.
  * Each string is one or more paragraphs rendered sequentially in the T&C PDF.
  */
 export const ROUNDHOUSE_BANQUETING_TERMS_SECTIONS: string[] = [
-  `The Roundhouse Banqueting Terms and Conditions
+  `The Grand Round House Terms and Conditions
 
-Thank you for choosing The Roundhouse Banqueting Limited. Your booking constitutes a formal agreement to hire venue facilities on these terms.`,
+Thank you for choosing The Grand Round House. Your booking constitutes a formal agreement to hire venue facilities on these terms.`,
 
   `1. DEFINITIONS
 
-1.1 We are The Roundhouse Banqueting Limited ("we" or "us" or "the company" or "our"); provide venue hire and related products and services ("the services"). Our registered office is at Lodge Avenue, Dagenham, RM8 2HY.
+1.1 We are The Grand Round House ("we" or "us" or "the company" or "our"); provide venue hire and related products and services ("the services"). Our registered office is at Lodge Avenue, Dagenham, RM8 2HY.
 
 1.2 The "customer" (or "client") is the organisation or individual who has booked or purchased the services.
 
@@ -115,9 +115,9 @@ Should it be necessary for the Company to cancel the booking for any of the reas
 
   `9. CATERING
 
-9.1 The customer may use an external caterer provided they have been approved by The Roundhouse Banqueting Limited and are an established and professional organisation specialising in large-scale catering. The caterer must have a minimum FSA rating of 3 out of 5. All food handlers must be in possession of a Level 2 Food Hygiene Certificate. The caterer must also have public liability insurance cover of at least £10million and transport the food to the venue in an appropriate refrigerated vehicle.
+9.1 The customer may use an external caterer provided they have been approved by The Grand Round House and are an established and professional organisation specialising in large-scale catering. The caterer must have a minimum FSA rating of 3 out of 5. All food handlers must be in possession of a Level 2 Food Hygiene Certificate. The caterer must also have public liability insurance cover of at least £10million and transport the food to the venue in an appropriate refrigerated vehicle.
 
-9.2 All caterers must sign the 'The Roundhouse Supplier Guidance' document in order to work within the venue.
+9.2 All caterers must sign the 'The Grand Round House Supplier Guidance' document in order to work within the venue.
 
 9.3 The customer may not bring any edible goods onto the premises that have been prepared privately i.e. in a domestic kitchen.
 
@@ -135,11 +135,11 @@ Should it be necessary for the Company to cancel the booking for any of the reas
 
 10.1 All suppliers must have public liability cover of at least £5million.
 
-10.2 Any suppliers associated with the event bringing in their supplies or equipment does so at their own risk. The Roundhouse Banqueting Limited takes no responsibilities of any damages or loss. The customer must ensure they have liabilities cover in case of any claim due to its malfunction or any accidents resulting from its operation.
+10.2 Any suppliers associated with the event bringing in their supplies or equipment does so at their own risk. The Grand Round House takes no responsibilities of any damages or loss. The customer must ensure they have liabilities cover in case of any claim due to its malfunction or any accidents resulting from its operation.
 
-10.3 All suppliers must sign the 'The Roundhouse Supplier Guidance' document in order to be allowed to work within the venue.
+10.3 All suppliers must sign the 'The Grand Round House Supplier Guidance' document in order to be allowed to work within the venue.
 
-10.4 The Roundhouse Banqueting Limited reserve the right to restrict suppliers from working within the venue should they not follow the venue guidance.
+10.4 The Grand Round House reserve the right to restrict suppliers from working within the venue should they not follow the venue guidance.
 
 10.5 If any equipment or property is damaged, broken or misused by the customers or their suppliers, the customer will be liable for the value of its replacement. In addition, if the damage to the property or equipment impacts other bookings then the customer shall also be responsible for such consequential loss.`,
 
@@ -278,7 +278,7 @@ b) Increases in the costs of materials, equipment or other services necessary fo
 
 23.5 During the period of hiring, the customer shall be responsible for all damages, losses, claims and costs arising out of their use of the premises and shall indemnify the company from and against any expense, liability, loss, claim or proceedings including claims for personal injury to or the death of any person whatsoever arising out of the course of or caused as a result of hiring except where due to the negligence of the company.
 
-23.6 The Roundhouse Banqueting Limited will not be liable or be held responsible in any manner whatsoever should the booking be cancelled by them as a result of circumstances beyond their reasonable control. Such instances include but are not limited to natural disasters, power cuts, unforeseen maintenance work, unexpected closure etc.`,
+23.6 The Grand Round House will not be liable or be held responsible in any manner whatsoever should the booking be cancelled by them as a result of circumstances beyond their reasonable control. Such instances include but are not limited to natural disasters, power cuts, unforeseen maintenance work, unexpected closure etc.`,
 
   `24. ENTIRE AGREEMENT
 
@@ -286,7 +286,7 @@ b) Increases in the costs of materials, equipment or other services necessary fo
 
 24.2 We are not responsible for delays outside of our control. If our supply of the products and services is delayed by an event outside of our control then we will contact you as soon as possible to let you know and we will take steps to minimise the effect of the delay. Provided we do this we will not be liable for delays caused by the event. Should this contract be affected by a nationwide lockdown or UK Government restriction due to Coronavirus, we will assist you with moving the date of your function to an alternative like for like date as a goodwill gesture. If an alternative date is not required, then you can receive a refund for any products or services you have paid for but not received subject to the deduction of any costs incurred by the company.`,
 
-  `I confirm I have read, understood and accept the above Terms and Conditions, which will apply to any booking(s) I have with The Roundhouse Banqueting Limited.
+  `I confirm I have read, understood and accept the above Terms and Conditions, which will apply to any booking(s) I have with The Grand Round House.
 
 Clients Name in Full……………………………………………………  Date of Function……..……………………………………
 

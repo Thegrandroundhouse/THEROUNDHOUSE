@@ -57,7 +57,7 @@ export default function Footer() {
       </div>
       <div className="container footer-grid">
         <div className="footer-brand">
-          <div className="section-label">The Grand Roundhouse</div>
+          <div className="section-label">The Grand Round House</div>
           <p className="footer-address">{siteConfig.address}</p>
           <a href={`tel:${PHONE.replace(/\s/g, "")}`} className="footer-phone">
             {PHONE}

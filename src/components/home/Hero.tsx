@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const VENUE_NAME = "The Grand Roundhouse";
+const VENUE_NAME = "The Grand Round House";
 const HERO_TITLE = "A Luxury Wedding Venue Like No Other";
 const HERO_SUBTITLE = "Where every celebration is crafted with care, elegance and timeless attention to detail.";
 const STATS = [

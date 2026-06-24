@@ -12,7 +12,7 @@ export default function Catering() {
         />
         <div className="catering-content">
           <p className="section-label">In-House Catering</p>
-          <h2 className="section-heading">The Grand Roundhouse Catering</h2>
+          <h2 className="section-heading">The Grand Round House Catering</h2>
           <p className="catering-text">
             Our passion for flavour drives us to deliver exceptional cuisine.
             Our approach is to create delicious dishes using only the freshest

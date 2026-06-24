@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Team – The Grand Roundhouse",
-  description: "Meet the team behind The Grand Roundhouse.",
+  title: "Team – The Grand Round House",
+  description: "Meet the team behind The Grand Round House.",
 };
 
 export default function TeamPage() {
@@ -11,7 +11,7 @@ export default function TeamPage() {
       <div className="container">
         <h1 className="page-title">Team</h1>
         <p className="page-lead">
-          Meet the people who make every celebration at The Grand Roundhouse exceptional.
+          Meet the people who make every celebration at The Grand Round House exceptional.
         </p>
         <p className="page-body">
           Content for this page can be managed from the admin dashboard under Pages &amp; content.

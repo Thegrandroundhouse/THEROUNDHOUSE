@@ -1,5 +1,7 @@
 import {
   VENUE_ADDRESS,
+  VENUE_BRAND_NAME,
+  VENUE_CONTACT_EMAIL,
   VENUE_LEGAL_NAME,
   LEGACY_VENUE_ADDRESS_PATTERNS,
 } from "@/lib/venue-constants";
@@ -18,17 +20,41 @@ export type InvoiceBusinessPayload = {
 };
 
 export const INVOICE_BUSINESS_DEFAULTS: InvoiceBusinessPayload = {
-  venueName: VENUE_LEGAL_NAME,
+  venueName: VENUE_BRAND_NAME,
   venueTagline: "Wedding & events venue",
   venueAddress: VENUE_ADDRESS,
   venuePhone: "",
-  venueEmail: "",
+  venueEmail: VENUE_CONTACT_EMAIL,
   bankName: "",
   sortCode: "",
   accountNumber: "",
   accountName: VENUE_LEGAL_NAME,
   paymentReference: "Invoice number",
 };
+
+const LEGACY_VENUE_DISPLAY_NAMES = [
+  "The Grand Roundhouse",
+  "The Roundhouse",
+  "The Roundhouse Banqueting Limited",
+] as const;
+
+const LEGACY_VENUE_EMAILS = ["events@theroundhouse.co.uk"] as const;
+
+function applyBrandDefaults(payload: InvoiceBusinessPayload): InvoiceBusinessPayload {
+  let { venueName, venueEmail } = payload;
+  const trimmedName = venueName.trim();
+  if (!trimmedName || LEGACY_VENUE_DISPLAY_NAMES.includes(trimmedName as (typeof LEGACY_VENUE_DISPLAY_NAMES)[number])) {
+    venueName = VENUE_BRAND_NAME;
+  }
+  const trimmedEmail = venueEmail.trim();
+  if (
+    !trimmedEmail ||
+    LEGACY_VENUE_EMAILS.includes(trimmedEmail as (typeof LEGACY_VENUE_EMAILS)[number])
+  ) {
+    venueEmail = VENUE_CONTACT_EMAIL;
+  }
+  return { ...payload, venueName, venueEmail };
+}
 
 function applyVenueAddressDefaults(payload: InvoiceBusinessPayload): InvoiceBusinessPayload {
   const addr = payload.venueAddress.trim();
@@ -61,7 +87,7 @@ export function parseInvoiceBusinessValue(value: unknown): InvoiceBusinessPayloa
     paymentReference:
       typeof o.paymentReference === "string" ? o.paymentReference : INVOICE_BUSINESS_DEFAULTS.paymentReference,
   };
-  return applyVenueAddressDefaults(payload);
+  return applyBrandDefaults(applyVenueAddressDefaults(payload));
 }
 
 /** Normalize admin PUT body (no legacy address auto-fix on save). */

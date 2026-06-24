@@ -11,7 +11,7 @@ import {
 import { writeAuditLog } from "@/lib/audit-log";
 import { getBookingSlotsConfig } from "@/lib/booking-slots";
 import { parseInvoiceBusinessValue } from "@/lib/invoice-business";
-import { VENUE_LEGAL_NAME } from "@/lib/venue-constants";
+import { ADMIN_VENUE_FALLBACK } from "@/lib/venue-constants";
 
 const DEFAULT_SECTIONS: ExportSections = {
   client: true,
@@ -84,7 +84,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     event_slot_label = def ? `${def.label}${def.timeLabel ? ` · ${def.timeLabel}` : ""}` : String(slotKey).replace(/_/g, " ");
   }
 
-  const venueName = process.env.NEXT_PUBLIC_SITE_NAME || VENUE_LEGAL_NAME;
+  const venueName = process.env.NEXT_PUBLIC_SITE_NAME || ADMIN_VENUE_FALLBACK;
   let business: InvoiceBusinessBlock | null = null;
   try {
     const { data: row } = await supabase.from("site_settings").select("value").eq("key", "invoice_business").maybeSingle();

@@ -1,4 +1,5 @@
 import type { InvoiceBusinessPayload } from "@/app/api/admin/settings/invoice-business/route";
+import { VENUE_BRAND_NAME } from "@/lib/venue-constants";
 
 export type BookingMergeVars = {
   venueName: string;
@@ -25,7 +26,7 @@ function escapeRe(s: string) {
 
 /** Placeholder merge for template editor live preview */
 export const AGREEMENT_EDITOR_PREVIEW_VARS: Record<string, string> = {
-  venueName: "The Roundhouse",
+  venueName: VENUE_BRAND_NAME,
   client_name: "Alex & Jordan",
   client_email: "couple@example.com",
   event_date: "Saturday, 14 June 2026",
@@ -61,7 +62,7 @@ export function bookingToMergeVars(
       ? `£${(booking.total_cents / 100).toFixed(2)}`
       : "—";
   return {
-    venueName: business?.venueName || "The venue",
+    venueName: business?.venueName || VENUE_BRAND_NAME,
     client_name: booking.client_name || booking.client_email || "Client",
     client_email: booking.client_email || "",
     event_date: booking.event_date || "—",

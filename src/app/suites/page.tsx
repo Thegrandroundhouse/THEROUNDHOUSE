@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { SuitesList } from "@/components/suites/SuitesList";
 
 export const metadata: Metadata = {
-  title: "Suites – The Grand Roundhouse",
+  title: "Suites – The Grand Round House",
   description: "Main Hall, The Round Room, The Garden Suite and VIP Suites. Find the perfect space for your event.",
 };
 

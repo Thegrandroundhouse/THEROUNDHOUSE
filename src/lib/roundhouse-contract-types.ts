@@ -1,4 +1,4 @@
-/** Structured hire contract (Mr Rahman / Roundhouse Banqueting layout). Stored in booking_agreements.custom_values. */
+/** Structured hire contract layout. Stored in booking_agreements.custom_values. */
 
 export type ContractLineItem = {
   id: string;

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Virtual Tour – The Grand Roundhouse",
-  description: "Take a virtual tour of The Grand Roundhouse venue.",
+  title: "Virtual Tour – The Grand Round House",
+  description: "Take a virtual tour of The Grand Round House venue.",
 };
 
 export default function VirtualTourPage() {

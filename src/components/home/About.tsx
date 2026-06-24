@@ -17,10 +17,10 @@ export default function About() {
           <h2 className="section-heading">
             Welcome to
             <br />
-            The Grand Roundhouse
+            The Grand Round House
           </h2>
           <p className="about-text">
-            The Grand Roundhouse is a luxury wedding and reception venue in Dagenham,
+            The Grand Round House is a luxury wedding and reception venue in Dagenham,
             Essex. We are unique because we know that each event will only
             happen once in a lifetime — and so we do everything possible to
             ensure perfection for your special day.

@@ -23,7 +23,7 @@ Overview of main components and how they fit together.
 ## Home page sections
 
 - **Hero** — Full-width hero image, title “Welcome To A Luxury Wedding Venue Like No Other”, CTA, animated stats strip (reviews, ballrooms, capacity).
-- **About** — “Welcome to The Roundhouse” text and image; “About Us” link.
+- **About** — “Welcome to The Grand Round House” text and image; “About Us” link.
 - **VenueCalendar** — Month calendar; days can be “available” or “booked”. Data should come from Supabase `venue_calendar` (currently placeholder).
 - **Testimonials** — Carousel of quotes with dot navigation (state: `active` index).
 - **WeddingTypes** — Grid of wedding types (Asian, Turkish, Jewish, etc.) with “Discover” links.

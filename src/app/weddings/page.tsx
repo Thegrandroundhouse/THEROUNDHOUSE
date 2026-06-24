@@ -5,8 +5,8 @@ import { weddingTypes } from "@/data/weddings";
 import { VENUE_IMAGES, VENUE_IMAGE_ALTS } from "@/data/venue-images";
 
 export const metadata: Metadata = {
-  title: "Weddings – The Grand Roundhouse",
-  description: "Luxury wedding celebrations at The Grand Roundhouse. Asian, African, Turkish, Sikh, Hindu, Muslim & Bengali weddings.",
+  title: "Weddings – The Grand Round House",
+  description: "Luxury wedding celebrations at The Grand Round House. Asian, African, Turkish, Sikh, Hindu, Muslim & Bengali weddings.",
 };
 
 export default function WeddingsPage() {

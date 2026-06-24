@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy – The Grand Roundhouse",
-  description: "Privacy policy for The Grand Roundhouse website.",
+  title: "Privacy Policy – The Grand Round House",
+  description: "Privacy policy for The Grand Round House website.",
 };
 
 export default function PrivacyPage() {

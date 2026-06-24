@@ -6,6 +6,11 @@ import type { InvoiceBusinessPayload } from "@/lib/invoice-business";
 import { parseInvoiceBusinessValue } from "@/lib/invoice-business";
 import { loadHireContractSettingsFromDb } from "@/lib/hire-contract-settings";
 
+async function defaultSalesRepName(supabase: NonNullable<ReturnType<typeof getAdminClient>>, userId: string) {
+  const { data: st } = await supabase.from("staff").select("display_name").eq("user_id", userId).maybeSingle();
+  return st?.display_name?.trim() || "";
+}
+
 async function loadBusiness(supabase: NonNullable<ReturnType<typeof getAdminClient>>): Promise<InvoiceBusinessPayload | null> {
   const { data } = await supabase.from("site_settings").select("value").eq("key", "invoice_business").maybeSingle();
   if (!data?.value) return null;
@@ -25,7 +30,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const business = await loadBusiness(supabase);
   const hireSettings = await loadHireContractSettingsFromDb(supabase);
-  const draft = await buildBanquetingContract(supabase, booking as Record<string, unknown>, business, {}, hireSettings);
+  const user = await getAuthUserFromRequest(request);
+  const salesRep = user ? await defaultSalesRepName(supabase, user.id) : "";
+  const draft = await buildBanquetingContract(
+    supabase,
+    booking as Record<string, unknown>,
+    business,
+    salesRep ? { salesRep } : {},
+    hireSettings,
+  );
   return NextResponse.json({ draft });
 }
 

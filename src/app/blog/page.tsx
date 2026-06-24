@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Blog – The Grand Roundhouse",
-  description: "News, inspiration and updates from The Grand Roundhouse.",
+  title: "Blog – The Grand Round House",
+  description: "News, inspiration and updates from The Grand Round House.",
 };
 
 export default function BlogPage() {

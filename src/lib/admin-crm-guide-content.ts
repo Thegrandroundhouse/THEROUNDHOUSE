@@ -2,7 +2,7 @@
  * Staff-facing CRM user guide — source text for the Settings PDF download.
  * Keep in sync with sidebar routes and booking workspace tabs.
  */
-import { ADMIN_APP_NAME, VENUE_ADDRESS, VENUE_LEGAL_NAME } from "@/lib/venue-constants";
+import { ADMIN_APP_NAME, VENUE_ADDRESS, VENUE_BRAND_NAME, BANQUETING_HIRE_TEMPLATE_LABEL } from "@/lib/venue-constants";
 
 export type GuideSection = {
   id: string;
@@ -16,7 +16,7 @@ export type GuideSection = {
 export const CRM_GUIDE_INTRO = {
   title: `${ADMIN_APP_NAME} — Staff CRM User Guide`,
   subtitle: "How every feature works and how they connect",
-  venue: `${VENUE_LEGAL_NAME} · ${VENUE_ADDRESS}`,
+  venue: `${VENUE_BRAND_NAME} · ${VENUE_ADDRESS}`,
   version: "May 2026",
 };
 
@@ -28,7 +28,7 @@ export const CRM_GUIDE_FLOW = `THE CLIENT JOURNEY (end to end)
 
 3. BOOKING — Convert the enquiry or create a booking from Calendar / Bookings → New. Pick a package (from Packages), set money (total, deposit, balance), and assign a time slot.
 
-4. CONTRACT — On the booking page, open tab “3 · Contracts”. Generate the Roundhouse Banqueting hire contract PDF. Line items pull from the package; business details pull from Settings → Business & bank.
+4. CONTRACT — On the booking page, open tab “3 · Contracts”. Generate the ${BANQUETING_HIRE_TEMPLATE_LABEL} PDF. Line items pull from the package; business details pull from Settings → Business & bank.
 
 5. PAYMENTS — Tab “4 · Payments” and Payments in the sidebar record deposits and milestones. The booking banner and Overview show what is collected vs outstanding.
 
@@ -106,7 +106,7 @@ export const CRM_GUIDE_SECTIONS: GuideSection[] = [
     bullets: [
       "1 · Summary — Reservation, money, package, payment milestones, progress chips, invoices.",
       "2 · Event details — Guest count, space/suite, menu, décor, seating, timeline (saved to booking_wedding_details).",
-      "3 · Contracts — Generate Roundhouse Banqueting hire contract PDF; optional T&Cs; sign tracking.",
+      `3 · Contracts — Generate ${BANQUETING_HIRE_TEMPLATE_LABEL} PDF; optional T&Cs; sign tracking.`,
       "4 · Payments — Milestone schedule (deposit, balance); links to full ledger.",
       "5 · Tasks — Checklist per booking; optional workflow templates.",
       "6 · Vendors — Link suppliers from the vendor directory with a role.",
@@ -175,7 +175,7 @@ export const CRM_GUIDE_SECTIONS: GuideSection[] = [
     title: "10. Agreements & contracts",
     path: "/admin/agreements",
     paragraphs: [
-      "Agreement templates live here. The preferred template for hire is “Roundhouse Banqueting — Hire contract”.",
+      `Agreement templates live here. The preferred template for hire is “${BANQUETING_HIRE_TEMPLATE_LABEL}”.`,
     ],
     bullets: [
       "Generate from booking — Tab 3 · Contracts; configure line items, sections, then PDF.",

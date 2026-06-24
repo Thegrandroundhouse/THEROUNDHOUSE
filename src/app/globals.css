@@ -12676,6 +12676,25 @@ section.bg-ink p.section-sub,
   font-size: 0.95rem;
   color: var(--color-text-muted);
 }
+.admin-send-email-modal .admin-settings-v2-textarea {
+  min-height: 14rem;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+.admin-send-email-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+}
+.admin-send-email-fallback {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: rgba(180, 83, 9, 0.08);
+  border: 1px solid rgba(180, 83, 9, 0.2);
+}
 
 @media (max-width: 640px) {
   .admin-bkd-banner-payments--v2,

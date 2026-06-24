@@ -253,7 +253,7 @@ export default function SettingsPage() {
       const blob = await r.blob();
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = "Roundhouse-Banqueting-CRM-User-Guide.pdf";
+      a.download = "Grand-Round-House-CRM-User-Guide.pdf";
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (err) {

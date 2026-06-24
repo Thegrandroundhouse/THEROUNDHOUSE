@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "FAQs – The Grand Roundhouse",
-  description: "Frequently asked questions about The Grand Roundhouse venue and events.",
+  title: "FAQs – The Grand Round House",
+  description: "Frequently asked questions about The Grand Round House venue and events.",
 };
 
 export default function FAQsPage() {

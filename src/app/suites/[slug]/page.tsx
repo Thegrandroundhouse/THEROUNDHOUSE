@@ -15,8 +15,8 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const suite = suites.find((s) => s.slug === slug);
-  if (!suite) return { title: "Suite – The Grand Roundhouse" };
-  return { title: `${suite.name} – The Grand Roundhouse`, description: suite.description };
+  if (!suite) return { title: "Suite – The Grand Round House" };
+  return { title: `${suite.name} – The Grand Round House`, description: suite.description };
 }
 
 export default async function SuitePage({ params }: Props) {

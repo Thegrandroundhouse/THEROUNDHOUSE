@@ -94,7 +94,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
       <header className="site-header">
         <div className="header-inner container">
           <Link href="/" className="logo">
-            The Grand Roundhouse
+            The Grand Round House
           </Link>
           <span className="header-phone-desk">
             <a href={`tel:${PHONE.replace(/\s/g, "")}`}>{PHONE}</a>

@@ -4,8 +4,8 @@ import Image from "next/image";
 import { eventTypes } from "@/data/events";
 
 export const metadata: Metadata = {
-  title: "Events – The Grand Roundhouse",
-  description: "Mehndi & Henna parties, Bar & Bat Mitzvah, corporate events and birthdays at The Grand Roundhouse.",
+  title: "Events – The Grand Round House",
+  description: "Mehndi & Henna parties, Bar & Bat Mitzvah, corporate events and birthdays at The Grand Round House.",
 };
 
 const PLACEHOLDER = "https://images.unsplash.com/photo-1519741497674-611481863552?w=600&q=80";

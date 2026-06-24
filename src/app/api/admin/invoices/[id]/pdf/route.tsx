@@ -4,7 +4,8 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { getAdminClient } from "@/lib/admin-api";
 import { InvoicePdfDocument, type InvoiceLinePdf } from "@/lib/invoice-pdf";
-import { VENUE_ADDRESS, VENUE_LEGAL_NAME } from "@/lib/venue-constants";
+import { VENUE_ADDRESS, ADMIN_VENUE_FALLBACK } from "@/lib/venue-constants";
+import { parseInvoiceBusinessValue } from "@/lib/invoice-business";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!(await getAuthUserFromRequest(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -44,15 +45,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const biz = businessRow?.value && typeof businessRow.value === "object" && !Array.isArray(businessRow.value)
     ? (businessRow.value as Record<string, unknown>)
     : null;
-  const venueName = (biz?.venueName as string) || process.env.NEXT_PUBLIC_SITE_NAME || VENUE_LEGAL_NAME;
-  const venueTagline = (biz?.venueTagline as string) || "Wedding & events venue";
-  const venueAddress = (biz?.venueAddress as string) || process.env.INVOICE_VENUE_ADDRESS || VENUE_ADDRESS;
-  const venuePhone = (biz?.venuePhone as string) || "";
-  const venueEmail = (biz?.venueEmail as string) || "";
-  const bankName = (biz?.bankName as string) || "";
-  const sortCode = (biz?.sortCode as string) || "";
-  const accountNumber = (biz?.accountNumber as string) || "";
-  const accountName = (biz?.accountName as string) || "";
+  const business = biz ? parseInvoiceBusinessValue(biz) : null;
+  const venueName = business?.venueName || process.env.NEXT_PUBLIC_SITE_NAME || ADMIN_VENUE_FALLBACK;
+  const venueTagline = business?.venueTagline || "Wedding & events venue";
+  const venueAddress = business?.venueAddress || process.env.INVOICE_VENUE_ADDRESS || VENUE_ADDRESS;
+  const venuePhone = business?.venuePhone || "";
+  const venueEmail = business?.venueEmail || "";
+  const bankName = business?.bankName || "";
+  const sortCode = business?.sortCode || "";
+  const accountNumber = business?.accountNumber || "";
+  const accountName = business?.accountName || "";
   const paymentReference = (biz?.paymentReference as string) || "";
 
   let logoUrl: string | null = inv.logo_url || null;

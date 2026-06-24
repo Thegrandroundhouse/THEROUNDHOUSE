@@ -8,6 +8,7 @@ import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import { AdminMigrationBanner } from "@/components/admin/AdminMigrationBanner";
 import { AgreementLivePreview } from "@/components/admin/AgreementLivePreview";
 import { mergeAgreementBody, AGREEMENT_EDITOR_PREVIEW_VARS } from "@/lib/agreement-merge";
+import { VENUE_BRAND_NAME } from "@/lib/venue-constants";
 
 const PLACEHOLDER_HELP =
   "{{venueName}} {{client_name}} {{client_email}} {{event_date}} {{booking_code}} {{event_slot_label}} {{total_gbp}} {{event_type}} {{package_name}} {{guest_count}} {{deposit_gbp}} {{balance_gbp}} {{vendors_list}} {{payment_schedule}} {{extras_block}} {{special_requirements_block}}";
@@ -23,7 +24,7 @@ function NewAgreementTemplateInner() {
   const [saving, setSaving] = useState(false);
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [migration, setMigration] = useState(false);
-  const [venue, setVenue] = useState({ name: "The Roundhouse", tagline: "" });
+  const [venue, setVenue] = useState({ name: VENUE_BRAND_NAME, tagline: "" });
 
   useEffect(() => {
     adminFetch("/api/admin/agreement-templates")

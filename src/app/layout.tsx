@@ -3,7 +3,7 @@ import "./globals.css";
 import { PublicShell } from "@/components/layout/PublicShell";
 
 export const metadata: Metadata = {
-  title: "The Grand Roundhouse – Wedding Venue Dagenham, Essex",
+  title: "The Grand Round House – Wedding Venue Dagenham, Essex",
   description:
     "A luxury wedding and reception venue in Dagenham, Essex. Elegance tailored to every occasion.",
 };

@@ -1,6 +1,6 @@
 # supabase — Backend configuration
 
-Supabase project configuration, migrations, and seed data for The Roundhouse.
+Supabase project configuration, migrations, and seed data for The Grand Round House.
 
 ## Structure
 

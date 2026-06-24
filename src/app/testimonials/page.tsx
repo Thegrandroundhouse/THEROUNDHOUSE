@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { TestimonialsFull } from "@/components/testimonials/TestimonialsFull";
 
 export const metadata: Metadata = {
-  title: "Testimonials – The Grand Roundhouse",
-  description: "What our couples and clients say about their experience at The Grand Roundhouse.",
+  title: "Testimonials – The Grand Round House",
+  description: "What our couples and clients say about their experience at The Grand Round House.",
 };
 
 export default function TestimonialsPage() {

@@ -7,6 +7,7 @@ import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import { AgreementPdfPreviewModal, useAgreementPdfPreview } from "@/components/admin/AgreementPdfPreviewModal";
 import { calcLineItems, formatGbp, applyBusinessBankToContract, hasContractBankDetails, applyLineItemTotalsToContract, resolveContractPaymentSummary } from "@/lib/build-banqueting-contract";
 import type { InvoiceBusinessPayload } from "@/app/api/admin/settings/invoice-business/route";
+import { BANQUETING_HIRE_TEMPLATE_LABEL, BANQUETING_TERMS_TEMPLATE_LABEL } from "@/lib/venue-constants";
 import {
   BANQUETING_HIRE_SLUG,
   BANQUETING_TERMS_SLUG,
@@ -708,6 +709,16 @@ export function AgreementGeneratePanel({
               />
             </div>
             <div className="admin-form-group">
+              <label>Sales representative</label>
+              <input
+                value={draft.enquiry.salesRep === "—" ? "" : draft.enquiry.salesRep}
+                onChange={(e) =>
+                  setDraft((d) => (d ? { ...d, enquiry: { ...d.enquiry, salesRep: e.target.value || "—" } } : d))
+                }
+                placeholder="Name on the contract PDF"
+              />
+            </div>
+            <div className="admin-form-group">
               <label>Suite / room</label>
               <input
                 value={draft.event.suites}
@@ -1233,7 +1244,7 @@ export function AgreementGeneratePanel({
       ) : !isStructuredPdf ? (
         <p className="admin-vnd-new-hint" style={{ marginTop: "0.5rem" }}>
           Text-based template — merges booking fields into the template body. For the official hire pack or T&amp;Cs, choose{" "}
-          <strong>Roundhouse Banqueting — Hire contract</strong> or <strong>Terms &amp; Conditions</strong>.
+          <strong>{BANQUETING_HIRE_TEMPLATE_LABEL}</strong> or <strong>{BANQUETING_TERMS_TEMPLATE_LABEL}</strong>.
         </p>
       ) : null}
     </div>

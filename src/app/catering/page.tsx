@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "In-House Catering – The Grand Roundhouse",
+  title: "In-House Catering – The Grand Round House",
   description: "Exceptional cuisine with the freshest produce and highest quality ingredients.",
 };
 

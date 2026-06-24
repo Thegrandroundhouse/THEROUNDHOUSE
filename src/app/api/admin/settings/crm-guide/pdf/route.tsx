@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": 'attachment; filename="Roundhouse-Banqueting-CRM-User-Guide.pdf"',
+      "Content-Disposition": 'attachment; filename="Grand-Round-House-CRM-User-Guide.pdf"',
     },
   });
 }

@@ -8,7 +8,7 @@ export default function Decor() {
           <p className="section-label">Décor</p>
           <h2 className="section-heading">Luxury Décor & Production</h2>
           <p className="decor-text">
-            Our in-house décor and production team is exclusive to The Grand Roundhouse.
+            Our in-house décor and production team is exclusive to The Grand Round House.
             Inspired by your dreams, our motto is “Imagine, Inspire, Design,
             Deliver”. We start with letting your imagination create our brief.
             We aim to inspire you with a vision for your event, including

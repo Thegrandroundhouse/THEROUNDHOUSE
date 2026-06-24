@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { adminFetch } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
+import { VENUE_BRAND_NAME } from "@/lib/venue-constants";
 
 type Template = {
   id: string;
@@ -65,7 +66,7 @@ export default function AgreementsPage() {
             <p className="admin-dash-kicker">Legal &amp; hire</p>
             <h1 className="admin-page-title admin-bk-title">Agreements</h1>
             <p className="admin-lead admin-bk-lead">
-              <strong>Roundhouse Banqueting</strong> hire contracts (4-page PDF + optional T&amp;C) pull line items, totals,
+              <strong>{VENUE_BRAND_NAME}</strong> hire contracts (4-page PDF + optional T&amp;C) pull line items, totals,
               and payment schedule from bookings. Legacy text templates remain available. Business details on{" "}
               <Link href="/admin/settings" className="admin-link">
                 Settings → Business

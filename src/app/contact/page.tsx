@@ -3,7 +3,7 @@ import { siteConfig } from "@/data/site";
 import { ContactLayout } from "@/components/contact/ContactLayout";
 
 export const metadata: Metadata = {
-  title: "Contact Us – The Grand Roundhouse",
+  title: "Contact Us – The Grand Round House",
   description: "Get in touch. Check availability and send an enquiry.",
 };
 
