@@ -21,9 +21,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const supabase = getAdminClient();
   if (!supabase) return NextResponse.json({ error: "Not configured" }, { status: 500 });
   const u: Record<string, unknown> = {};
-  if (body.name != null) u.name = body.name;
-  if (body.slug != null) u.slug = body.slug;
-  if (body.capacity !== undefined) u.capacity = body.capacity;
+  if (body.name != null) {
+    const trimmed = String(body.name).trim();
+    if (!trimmed) return NextResponse.json({ error: "Hall name is required" }, { status: 400 });
+    u.name = trimmed;
+    if (body.slug == null) {
+      u.slug = trimmed.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || `space-${Date.now()}`;
+    }
+  }
+  if (body.slug != null) u.slug = String(body.slug).trim();
+  if (body.capacity !== undefined) u.capacity = body.capacity === null || body.capacity === "" ? null : body.capacity;
   if (body.sort_order != null) u.sort_order = body.sort_order;
   const { data, error } = await supabase.from("venue_spaces").update(u).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
