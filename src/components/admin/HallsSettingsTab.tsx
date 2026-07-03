@@ -55,11 +55,18 @@ export function HallsSettingsTab() {
   };
 
   const removeHall = async (h: Hall) => {
-    if (!(await confirm(`Remove “${h.name}”?`, { title: "Delete hall", variant: "danger" }))) return;
+    if (
+      !(await confirm(
+        `Remove “${h.name}”? Any bookings linked to this hall will be kept, but will no longer be assigned to it.`,
+        { title: "Delete hall", variant: "danger", confirmLabel: "Remove hall" },
+      ))
+    ) {
+      return;
+    }
     const r = await adminFetch(`/api/admin/spaces/${h.id}`, { method: "DELETE" });
     if (!r.ok) {
-      const d = await r.json().catch(() => ({}));
-      await alert(typeof d.error === "string" ? d.error : "Could not delete — hall may be linked to bookings.");
+      const d = (await r.json().catch(() => ({}))) as { error?: string };
+      await alert(typeof d.error === "string" ? d.error : "Could not delete this hall.");
       return;
     }
     load();
