@@ -6,6 +6,7 @@ import Link from "next/link";
 import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
 import { SetReminderModal } from "@/components/admin/SetReminderModal";
+import { ClientAddressFields } from "@/components/admin/ClientAddressFields";
 
 const STATUS_OPTIONS = ["draft", "sent", "paid", "cancelled"] as const;
 
@@ -48,6 +49,7 @@ export default function InvoiceDetailPage() {
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
   const [adminNotes, setAdminNotes] = useState("");
+  const [clientAddress, setClientAddress] = useState("");
 
   const load = useCallback(() => {
     adminFetch(`/api/admin/invoices/${id}`)
@@ -59,6 +61,7 @@ export default function InvoiceDetailPage() {
           setDueDate(data.due_date || "");
           setNotes(data.notes || "");
           setAdminNotes(data.admin_notes || "");
+          setClientAddress(data.client_address || "");
         }
       })
       .finally(() => setLoading(false));
@@ -79,6 +82,7 @@ export default function InvoiceDetailPage() {
           due_date: dueDate || null,
           notes: notes || null,
           admin_notes: adminNotes || null,
+          client_address: clientAddress || null,
         }),
       });
       if (!res.ok) {
@@ -87,6 +91,7 @@ export default function InvoiceDetailPage() {
       }
       const data = await res.json();
       setInv(data);
+      setClientAddress(data.client_address || "");
       await alert("Saved.");
     } finally {
       setSaving(false);
@@ -198,11 +203,11 @@ export default function InvoiceDetailPage() {
             </div>
             <div className="admin-form-group admin-form-full">
               <label>Client</label>
-              <p style={{ margin: 0, color: "var(--color-text)" }}>
+              <p style={{ margin: "0 0 0.75rem", color: "var(--color-text)" }}>
                 <strong>{inv.client_name || "—"}</strong><br />
                 <span style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>{inv.client_email || "—"}</span>
-                {inv.client_address ? <><br /><span style={{ fontSize: "0.875rem" }}>{inv.client_address}</span></> : null}
               </p>
+              <ClientAddressFields value={clientAddress} onChange={setClientAddress} />
             </div>
             {inv.booking_id && (
               <div className="admin-form-group admin-form-full">

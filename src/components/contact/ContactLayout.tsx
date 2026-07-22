@@ -13,7 +13,7 @@ export function ContactLayout({ phone, email, address }: ContactLayoutProps) {
   function handleSelectDate(d: string) {
     setSelectedDate(d);
     if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
-      setTimeout(() => {
+      window.setTimeout(() => {
         formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 150);
     }
@@ -37,7 +37,7 @@ export function ContactLayout({ phone, email, address }: ContactLayoutProps) {
             Choose your date
           </h2>
           <p className="mt-1.5 text-sm leading-snug text-charcoal/70 sm:text-[0.9375rem]">
-            Tap an open day. Grey = fully booked. Tinted = some time slots left.
+            Tap an open day. Grey = fully booked. Tinted = limited (some halls or times still free). After selecting, the form shows which halls are available.
           </p>
           {formattedDate && (
             <p className="mt-3 rounded-lg bg-gold/10 px-3 py-2.5 text-center text-sm font-medium text-gold-dark ring-1 ring-gold/20">

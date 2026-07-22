@@ -1,5 +1,7 @@
 /** Human-readable labels and formatting for admin audit log entries. */
 
+import { normalizeStoredUkAddress } from "@/lib/uk-address";
+
 export type AuditDisplayRow = { label: string; value: string };
 
 const BOOKING_LABELS: Record<string, string> = {
@@ -73,7 +75,10 @@ export function bookingAuditSnapshot(row: Record<string, unknown>): Record<strin
   if (row.client_name) out.client_name = row.client_name;
   if (row.client_email) out.client_email = row.client_email;
   if (row.client_phone) out.client_phone = row.client_phone;
-  if (row.client_address) out.client_address = row.client_address;
+  if (row.client_address) {
+    const raw = String(row.client_address);
+    out.client_address = normalizeStoredUkAddress(raw) || raw;
+  }
   if (row.event_date) out.event_date = row.event_date;
   if (row.event_type) out.event_type = row.event_type;
   if (row.package_name) out.package_name = row.package_name;

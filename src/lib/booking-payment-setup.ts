@@ -96,6 +96,205 @@ export async function ensureBookingPaymentMilestones(
   return { created: true, count: count ?? 0 };
 }
 
+export type PaymentSchedulePreviewMilestone = {
+  label: string;
+  amount_cents: number;
+  dueNote: string;
+  previous_amount_cents: number | null;
+  status: string | null;
+};
+
+export type PaymentSchedulePreview = {
+  contractSumCents: number;
+  previousMilestoneSumCents: number;
+  changed: boolean;
+  hasExisting: boolean;
+  lineItems: {
+    description: string;
+    qty: number;
+    unitCostCents: number;
+    discountCents: number;
+    included: boolean;
+    lineTotalCents: number;
+  }[];
+  discountTotalCents: number;
+  proposed: PaymentSchedulePreviewMilestone[];
+};
+
+/** Preview how the 4-instalment plan would look for the current contract sum / line items. */
+export async function previewBookingPaymentSchedule(
+  supabase: SupabaseClient,
+  bookingId: string,
+): Promise<PaymentSchedulePreview | null> {
+  const { data: booking } = await supabase
+    .from("bookings")
+    .select("total_cents, deposit_cents, balance_cents, hire_contract_draft")
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (!booking) return null;
+
+  const settings = await loadHireContractSettingsFromDb(supabase);
+  const draft = booking.hire_contract_draft as {
+    lineItems?: {
+      description?: string;
+      qty?: number;
+      unitCostCents?: number;
+      discountCents?: number;
+      included?: boolean;
+    }[];
+    contractSumCents?: number;
+    discountTotalCents?: number;
+  } | null;
+
+  let contractSum = contractSumFromBooking(booking);
+  let discountTotalCents = 0;
+  const lineItems: PaymentSchedulePreview["lineItems"] = [];
+
+  if (draft && Array.isArray(draft.lineItems) && draft.lineItems.length > 0) {
+    for (const row of draft.lineItems) {
+      const qty = Math.max(1, Math.round(Number(row.qty) || 1));
+      const unit = Math.max(0, Math.round(Number(row.unitCostCents) || 0));
+      const disc = Math.max(0, Math.round(Number(row.discountCents) || 0));
+      const included = row.included !== false;
+      const lineTotal = included ? Math.max(0, qty * unit - disc) : 0;
+      if (included) discountTotalCents += disc;
+      lineItems.push({
+        description: String(row.description || "Item"),
+        qty,
+        unitCostCents: unit,
+        discountCents: disc,
+        included,
+        lineTotalCents: lineTotal,
+      });
+    }
+    if (typeof draft.contractSumCents === "number" && draft.contractSumCents >= 0) {
+      contractSum = draft.contractSumCents;
+    } else {
+      contractSum = lineItems.reduce((s, r) => s + r.lineTotalCents, 0);
+    }
+    if (typeof draft.discountTotalCents === "number") discountTotalCents = draft.discountTotalCents;
+  }
+
+  const schedule = buildPaymentScheduleFromTemplate(contractSum, settings.paymentSchedule);
+  const { data: existing } = await supabase
+    .from("booking_payment_milestones")
+    .select("label, amount_cents, status, sort_order")
+    .eq("booking_id", bookingId)
+    .order("sort_order");
+
+  const existingRows = existing ?? [];
+  const previousMilestoneSumCents = existingRows.reduce((s, r) => s + (Number(r.amount_cents) || 0), 0);
+  const proposed: PaymentSchedulePreviewMilestone[] = schedule.map((m, i) => {
+    const prev = existingRows[i];
+    return {
+      label: m.label,
+      amount_cents: m.amountCents,
+      dueNote: m.dueNote,
+      previous_amount_cents: prev?.amount_cents != null ? Number(prev.amount_cents) : null,
+      status: prev?.status ? String(prev.status) : null,
+    };
+  });
+
+  const amountsChanged =
+    existingRows.length === 0 ||
+    proposed.some((p, i) => (existingRows[i]?.amount_cents ?? null) !== p.amount_cents) ||
+    previousMilestoneSumCents !== contractSum;
+
+  return {
+    contractSumCents: contractSum,
+    previousMilestoneSumCents,
+    changed: amountsChanged,
+    hasExisting: existingRows.length > 0,
+    lineItems,
+    discountTotalCents,
+    proposed,
+  };
+}
+
+/**
+ * Rebuild instalment amounts from the current contract sum.
+ * Keeps paid/partial status on matching rows; updates amounts & labels from the hire schedule template.
+ */
+export async function rebuildBookingPaymentMilestones(
+  supabase: SupabaseClient,
+  bookingId: string,
+): Promise<{ rebuilt: boolean; count: number }> {
+  const { data: booking } = await supabase
+    .from("bookings")
+    .select("total_cents, deposit_cents, balance_cents, hire_contract_draft")
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (!booking) throw new Error("Booking not found");
+
+  const draft = booking.hire_contract_draft as { contractSumCents?: number } | null;
+  const money: BookingMoneyFields = {
+    total_cents:
+      typeof draft?.contractSumCents === "number" && draft.contractSumCents > 0
+        ? draft.contractSumCents
+        : booking.total_cents,
+    deposit_cents: booking.deposit_cents,
+    balance_cents: booking.balance_cents,
+  };
+  const contractSum = contractSumFromBooking(money);
+  if (contractSum <= 0) throw new Error("Set a contract total first");
+
+  // Keep booking.total_cents aligned with draft when rebuilding.
+  if (booking.total_cents !== contractSum) {
+    await supabase.from("bookings").update({ total_cents: contractSum }).eq("id", bookingId);
+  }
+
+  const settings = await loadHireContractSettingsFromDb(supabase);
+  const schedule = buildPaymentScheduleFromTemplate(contractSum, settings.paymentSchedule);
+
+  const { data: existing } = await supabase
+    .from("booking_payment_milestones")
+    .select("id, status, sort_order")
+    .eq("booking_id", bookingId)
+    .order("sort_order");
+
+  const rows = existing ?? [];
+
+  if (rows.length === 0) {
+    await seedBookingPaymentMilestones(supabase, bookingId, money, settings);
+    return { rebuilt: true, count: schedule.length };
+  }
+
+  for (let i = 0; i < schedule.length; i++) {
+    const m = schedule[i]!;
+    const row = rows[i];
+    if (row) {
+      const { error } = await supabase
+        .from("booking_payment_milestones")
+        .update({
+          label: m.label,
+          amount_cents: m.amountCents > 0 ? m.amountCents : null,
+          notes: m.dueNote || null,
+          sort_order: i,
+        })
+        .eq("id", row.id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await supabase.from("booking_payment_milestones").insert({
+        booking_id: bookingId,
+        sort_order: i,
+        label: m.label,
+        amount_cents: m.amountCents > 0 ? m.amountCents : null,
+        status: "pending",
+        notes: m.dueNote || null,
+      });
+      if (error) throw new Error(error.message);
+    }
+  }
+
+  for (let i = schedule.length; i < rows.length; i++) {
+    const row = rows[i]!;
+    if (row.status === "paid" || row.status === "partial") continue;
+    await supabase.from("booking_payment_milestones").delete().eq("id", row.id);
+  }
+
+  return { rebuilt: true, count: schedule.length };
+}
+
 export async function recordBookingCustomerPayment(
   supabase: SupabaseClient,
   bookingId: string,
@@ -113,6 +312,71 @@ export async function recordBookingCustomerPayment(
     paid_at: new Date().toISOString(),
   });
   if (error) throw new Error(error.message);
+}
+
+/** Sum of customer_in payments for a booking. */
+export async function getBookingPaidCents(supabase: SupabaseClient, bookingId: string): Promise<number> {
+  const { data } = await supabase
+    .from("payment_records")
+    .select("amount_cents")
+    .eq("booking_id", bookingId)
+    .eq("flow", "customer_in");
+  return (data ?? []).reduce((sum, r) => sum + (r.amount_cents || 0), 0);
+}
+
+/**
+ * Make ledger paid total equal targetCents (for list/table quick edit).
+ * Adds an adjustment payment when increasing; trims newest payments when decreasing.
+ */
+export async function setBookingPaidToTarget(
+  supabase: SupabaseClient,
+  bookingId: string,
+  targetCents: number,
+): Promise<{ paidCents: number; adjusted: boolean }> {
+  const target = Math.max(0, Math.round(Number(targetCents) || 0));
+  const current = await getBookingPaidCents(supabase, bookingId);
+  const diff = target - current;
+  if (diff === 0) return { paidCents: current, adjusted: false };
+
+  if (diff > 0) {
+    await recordBookingCustomerPayment(
+      supabase,
+      bookingId,
+      diff,
+      "Paid total (list edit)",
+      "Adjusted from bookings list",
+    );
+    return { paidCents: target, adjusted: true };
+  }
+
+  let remaining = -diff;
+  const { data: rows } = await supabase
+    .from("payment_records")
+    .select("id, amount_cents")
+    .eq("booking_id", bookingId)
+    .eq("flow", "customer_in")
+    .order("paid_at", { ascending: false });
+
+  for (const row of rows ?? []) {
+    if (remaining <= 0) break;
+    const amt = row.amount_cents || 0;
+    if (amt <= 0) continue;
+    if (amt <= remaining) {
+      const { error } = await supabase.from("payment_records").delete().eq("id", row.id);
+      if (error) throw new Error(error.message);
+      remaining -= amt;
+    } else {
+      const { error } = await supabase
+        .from("payment_records")
+        .update({ amount_cents: amt - remaining })
+        .eq("id", row.id);
+      if (error) throw new Error(error.message);
+      remaining = 0;
+    }
+  }
+
+  const paidCents = await getBookingPaidCents(supabase, bookingId);
+  return { paidCents, adjusted: true };
 }
 
 /** Apply received money to instalments in order (matches hire contract schedule). */

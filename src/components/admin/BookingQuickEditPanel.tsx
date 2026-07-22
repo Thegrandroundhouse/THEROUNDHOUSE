@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import Link from "next/link";
 import type { Booking, BookingStatus } from "@/types/crm";
 import { AdminDateAvailabilityAdvisory } from "@/components/admin/AdminDateAvailabilityAdvisory";
+import { ClientAddressFields } from "@/components/admin/ClientAddressFields";
 
 const STATUS_OPTIONS: BookingStatus[] = ["pending", "confirmed", "cancelled", "completed"];
 const STATUS_LABELS: Record<BookingStatus, string> = {
@@ -119,16 +120,13 @@ export function BookingQuickEditPanel({
                 autoComplete="tel"
               />
             </label>
-            <label className="admin-bkd-quick-field admin-bkd-quick-field--full">
-              <span>Address</span>
-              <textarea
-                className="admin-bk-simple-input"
-                rows={2}
+            <div className="admin-bkd-quick-field admin-bkd-quick-field--full">
+              <ClientAddressFields
+                variant="quick"
                 value={form.client_address ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, client_address: e.target.value }))}
-                placeholder="For the hire contract PDF"
+                onChange={(client_address) => setForm((f) => ({ ...f, client_address }))}
               />
-            </label>
+            </div>
           </div>
         </div>
 

@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
-import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { getAdminClient } from "@/lib/admin-api";
-import { getBookingSlotsConfig, nextOpenDatesForPublic } from "@/lib/booking-slots";
-import { isDateOpenForPublicEnquiryHalls } from "@/lib/public-calendar-availability";
+import { getBookingSlotsConfig, isWholeDaySlotKey } from "@/lib/booking-slots";
+import {
+  isDateOpenForPublicEnquiryHalls,
+  loadActiveDateHolds,
+  mergeCalendarBlocks,
+  slotHoldCountsByDate,
+} from "@/lib/public-calendar-availability";
 import { listVenueHalls, loadCalendarBlocks } from "@/lib/booking-halls";
 
 /** Public: next dates that still accept enquiries (hall-aware blocks + slot capacity). */
@@ -22,9 +26,18 @@ export async function GET(request: Request) {
   const cursor = new Date(y, m - 1, d);
   for (let i = 0; i < 400 && out.length < limit; i++) {
     const ds = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
-    const end = ds;
-    const blocks = await loadCalendarBlocks(supabase, ds, end);
-    if (await isDateOpenForPublicEnquiryHalls(supabase, ds, config, blocks, allHallIds)) out.push(ds);
+    const [manualBlocks, holds] = await Promise.all([
+      loadCalendarBlocks(supabase, ds, ds),
+      loadActiveDateHolds(supabase, ds, ds),
+    ]);
+    const holdBlocks = holds
+      .filter((h) => isWholeDaySlotKey(h.event_slot_key))
+      .map((h) => ({ date: h.date, space_id: h.space_id }));
+    const blocks = mergeCalendarBlocks(manualBlocks, holdBlocks);
+    const slotHolds = slotHoldCountsByDate(holds).get(ds) ?? {};
+    if (await isDateOpenForPublicEnquiryHalls(supabase, ds, config, blocks, allHallIds, slotHolds)) {
+      out.push(ds);
+    }
     cursor.setDate(cursor.getDate() + 1);
   }
   return NextResponse.json({ dates: out });

@@ -286,10 +286,37 @@ export default function BookingDetailPage() {
   const setupPaymentsSchedule = async () => {
     setSetupPaymentsLoading(true);
     try {
-      const r = await adminFetch(`/api/admin/bookings/${id}/setup-payments`, { method: "POST" });
+      const previewRes = await adminFetch(`/api/admin/bookings/${id}/setup-payments`);
+      if (!previewRes.ok) throw new Error(await parseAdminError(previewRes, "Couldn’t load payment schedule preview"));
+      const preview = (await previewRes.json()) as import("@/lib/booking-payment-setup").PaymentSchedulePreview;
+      if (!preview.contractSumCents || preview.contractSumCents <= 0) {
+        await alert("Add line items or set a contract total first — needed for the 25% × 4 instalment plan.", {
+          title: "No contract sum",
+        });
+        return;
+      }
+      const { formatPaymentScheduleConfirmMessage } = await import("@/lib/payment-schedule-confirm");
+      const ok = await confirm(formatPaymentScheduleConfirmMessage(preview), {
+        title: preview.hasExisting ? "Confirm updated 4-payment plan" : "Confirm 4-payment plan",
+        confirmLabel: preview.hasExisting ? "Update schedule" : "Create schedule",
+      });
+      if (!ok) return;
+
+      const r = await adminFetch(`/api/admin/bookings/${id}/setup-payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rebuild: preview.hasExisting }),
+      });
       if (!r.ok) throw new Error(await parseAdminError(r, "Couldn’t create payment schedule"));
       loadPayments();
       loadWorkspace();
+      const data = (await r.json()) as { created?: boolean; rebuilt?: boolean };
+      await alert(
+        data.rebuilt
+          ? "4-instalment plan updated to match the current contract breakdown."
+          : "4-instalment plan created from the current contract sum.",
+        { title: "Payment schedule" },
+      );
     } catch (e) {
       await alert(e instanceof Error ? e.message : "Couldn’t create payment schedule");
     } finally {
@@ -972,6 +999,51 @@ export default function BookingDetailPage() {
             }}
             onOpenPayments={() => setWorkspaceTab("payments")}
             packageDetail={packageDetail}
+            onContractSumChange={(sum) => {
+              setTotalPounds(centsToPoundsInput(sum));
+              setBooking((b) => (b ? { ...b, total_cents: sum } : b));
+              setForm((f) => ({ ...f, total_cents: sum }));
+            }}
+            onOfferPaymentResync={() => {
+              void (async () => {
+                try {
+                  const previewRes = await adminFetch(`/api/admin/bookings/${id}/setup-payments`);
+                  if (!previewRes.ok) return;
+                  const preview =
+                    (await previewRes.json()) as import("@/lib/booking-payment-setup").PaymentSchedulePreview;
+                  if (!preview.hasExisting || !preview.changed) return;
+                  const { formatPaymentScheduleConfirmMessage } = await import("@/lib/payment-schedule-confirm");
+                  const ok = await confirm(
+                    `${formatPaymentScheduleConfirmMessage(preview)}\n\nUpdate the 4-payment plan now?`,
+                    {
+                      title: "Contract changed — update payments?",
+                      confirmLabel: "Update 4-payment plan",
+                      cancelLabel: "Not now",
+                    },
+                  );
+                  if (!ok) return;
+                  setSetupPaymentsLoading(true);
+                  const r = await adminFetch(`/api/admin/bookings/${id}/setup-payments`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ rebuild: true }),
+                  });
+                  if (!r.ok) {
+                    await alert(await parseAdminError(r, "Couldn’t update payment schedule"));
+                    return;
+                  }
+                  loadPayments();
+                  loadWorkspace();
+                  await alert("4-instalment plan updated to match the new breakdown.", {
+                    title: "Payment schedule updated",
+                  });
+                } catch {
+                  /* non-blocking */
+                } finally {
+                  setSetupPaymentsLoading(false);
+                }
+              })();
+            }}
           />
         }
         paymentsSlot={
@@ -1018,6 +1090,12 @@ export default function BookingDetailPage() {
                   bookingId={id}
                   templates={agreementTemplates}
                   onGenerated={(d) => setBookingAgreements((prev) => [d as (typeof bookingAgreements)[0], ...prev])}
+                  onContractSaved={(draft) => {
+                    const sum = draft.contractSumCents;
+                    setTotalPounds(centsToPoundsInput(sum));
+                    setBooking((b) => (b ? { ...b, total_cents: sum } : b));
+                    setForm((f) => ({ ...f, total_cents: sum }));
+                  }}
                 />
               ) : null}
               {bookingAgreements.length > 0 ? (

@@ -8,10 +8,12 @@ import type { Booking, BookingStatus } from "@/types/crm";
 import { AdminStatsCards } from "@/components/admin/AdminStatsCards";
 import { AdminDateFilter, getDateRangeFromValue, useDateFilterState } from "@/components/admin/AdminDateFilter";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
+import { MoneyInput } from "@/components/admin/MoneyInput";
 import {
   BOOKING_COMPLETED_FUTURE_EVENT_MESSAGE,
   isEventDateInFutureLondon,
 } from "@/lib/booking-status-rules";
+import { bookingMoneyFromLedger } from "@/lib/booking-money-summary";
 import {
   BOOKINGS_EXPORT_COLUMNS_DEFAULT,
   BOOKINGS_EXPORT_COLUMN_LABELS,
@@ -40,11 +42,6 @@ const STATUS_LABELS: Record<BookingStatus, string> = {
 type BookingRow = Booking & { paid_cents?: number; due_cents?: number | null };
 
 const STATUS_ORDER: BookingStatus[] = ["pending", "confirmed", "completed", "cancelled"];
-
-function formatPounds(cents: number | null) {
-  if (cents == null) return "—";
-  return "£" + (cents / 100).toFixed(2);
-}
 
 type ExportDateMode = "all" | "year" | "range";
 
@@ -99,6 +96,7 @@ export default function BookingsPage() {
   const [exportingDownload, setExportingDownload] = useState(false);
   const [exportCounting, setExportCounting] = useState(false);
   const [debouncedQ, setDebouncedQ] = useState("");
+  const [moneySavingId, setMoneySavingId] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -133,6 +131,69 @@ export default function BookingsPage() {
       return;
     }
     setList((prev) => prev.map((b) => (b.id === bookingId ? { ...b, status } : b)));
+  };
+
+  const patchRowMoney = (bookingId: string, patch: Partial<BookingRow>) => {
+    setList((prev) =>
+      prev.map((b) => {
+        if (b.id !== bookingId) return b;
+        const next = { ...b, ...patch };
+        const paid = next.paid_cents ?? 0;
+        const { stillDueCents } = bookingMoneyFromLedger(next.total_cents, paid);
+        next.due_cents = next.total_cents != null ? stillDueCents : null;
+        return next;
+      }),
+    );
+  };
+
+  const saveTotalCents = async (bookingId: string, total_cents: number) => {
+    setMoneySavingId(bookingId);
+    try {
+      const res = await adminFetch(`/api/admin/bookings/${bookingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ total_cents }),
+      });
+      if (!res.ok) throw new Error(await parseAdminError(res, "Couldn’t update total"));
+      const data = (await res.json()) as { total_cents?: number | null; paid_cents?: number; due_cents?: number | null };
+      patchRowMoney(bookingId, {
+        total_cents: data.total_cents ?? total_cents,
+        paid_cents: data.paid_cents,
+        due_cents: data.due_cents,
+      });
+    } catch (e) {
+      await alert(e instanceof Error ? e.message : "Couldn’t update total");
+    } finally {
+      setMoneySavingId(null);
+    }
+  };
+
+  const savePaidCents = async (bookingId: string, paid_cents: number) => {
+    setMoneySavingId(bookingId);
+    try {
+      const res = await adminFetch(`/api/admin/bookings/${bookingId}/set-paid`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paid_cents }),
+      });
+      if (!res.ok) throw new Error(await parseAdminError(res, "Couldn’t update paid amount"));
+      const data = (await res.json()) as { paid_cents?: number; due_cents?: number | null; total_cents?: number | null };
+      patchRowMoney(bookingId, {
+        paid_cents: data.paid_cents ?? paid_cents,
+        due_cents: data.due_cents,
+        total_cents: data.total_cents,
+      });
+    } catch (e) {
+      await alert(e instanceof Error ? e.message : "Couldn’t update paid amount");
+    } finally {
+      setMoneySavingId(null);
+    }
+  };
+
+  const saveDueCents = async (booking: BookingRow, due_cents: number) => {
+    const total = booking.total_cents ?? 0;
+    const paid = Math.max(0, total - Math.max(0, due_cents));
+    await savePaidCents(booking.id, paid);
   };
 
   const dateKey = `${dateFilter.preset}-${dateFilter.from}-${dateFilter.to}`;
@@ -582,10 +643,32 @@ export default function BookingsPage() {
                         {b.client_phone ? <span className="admin-pay-sub">{b.client_phone}</span> : null}
                       </td>
                       <td>{new Date(b.event_date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</td>
-                      <td className="admin-pay-amt">{formatPounds(b.total_cents)}</td>
-                      <td className="admin-pay-amt admin-pay-amt--ok">{formatPounds(b.paid_cents ?? 0)}</td>
+                      <td className="admin-pay-amt">
+                        <MoneyInput
+                          className="admin-table-inline-input admin-bk-money-input"
+                          cents={b.total_cents ?? 0}
+                          onCentsChange={(cents) => void saveTotalCents(b.id, cents)}
+                          aria-label={`Total for ${b.client_name || b.client_email}`}
+                          disabled={moneySavingId === b.id}
+                        />
+                      </td>
+                      <td className="admin-pay-amt admin-pay-amt--ok">
+                        <MoneyInput
+                          className="admin-table-inline-input admin-bk-money-input admin-bk-money-input--paid"
+                          cents={b.paid_cents ?? 0}
+                          onCentsChange={(cents) => void savePaidCents(b.id, cents)}
+                          aria-label={`Paid for ${b.client_name || b.client_email}`}
+                          disabled={moneySavingId === b.id}
+                        />
+                      </td>
                       <td className={`admin-pay-amt${(b.due_cents ?? 0) > 0 ? " admin-pay-amt--due" : ""}`}>
-                        {b.due_cents != null ? formatPounds(b.due_cents) : "—"}
+                        <MoneyInput
+                          className="admin-table-inline-input admin-bk-money-input admin-bk-money-input--due"
+                          cents={b.due_cents ?? 0}
+                          onCentsChange={(cents) => void saveDueCents(b, cents)}
+                          aria-label={`Still due for ${b.client_name || b.client_email}`}
+                          disabled={moneySavingId === b.id || b.total_cents == null}
+                        />
                       </td>
                       <td>
                         <select

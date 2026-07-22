@@ -12,6 +12,7 @@ import {
   BOOKING_COMPLETED_FUTURE_EVENT_MESSAGE,
   isEventDateInFutureLondon,
 } from "@/lib/booking-status-rules";
+import { normalizeStoredUkAddress } from "@/lib/uk-address";
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -52,6 +53,9 @@ export async function PATCH(
   ];
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const k of allowed) if (body[k] !== undefined) update[k] = body[k];
+  if (body.client_address !== undefined) {
+    update.client_address = normalizeStoredUkAddress(body.client_address);
+  }
 
   const slotConfig = await getBookingSlotsConfig(supabase);
   const nextDate = String(
@@ -98,6 +102,58 @@ export async function PATCH(
 
   const { data, error } = await supabase.from("bookings").update(update).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Keep balance_cents in sync when total changes (still due = total − ledger paid).
+  if (body.total_cents !== undefined) {
+    const { data: pays } = await supabase
+      .from("payment_records")
+      .select("amount_cents")
+      .eq("booking_id", id)
+      .eq("flow", "customer_in");
+    const paid = (pays ?? []).reduce((s, r) => s + (r.amount_cents || 0), 0);
+    const total = Math.max(0, Math.round(Number(data.total_cents) || 0));
+    const due = total > 0 ? Math.max(0, total - paid) : 0;
+    if (data.balance_cents !== due) {
+      const { data: synced } = await supabase
+        .from("bookings")
+        .update({ balance_cents: due, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select()
+        .single();
+      if (synced) {
+        await writeAuditLog(supabase, user, {
+          action: "booking_updated",
+          entity_type: "booking",
+          entity_id: id,
+          booking_id: id,
+          summary: `Updated booking ${before?.booking_code || id.slice(0, 8)}`,
+          payload_before: before ? bookingAuditSnapshot(before as Record<string, unknown>) : null,
+          payload_after: bookingAuditSnapshot(synced as Record<string, unknown>),
+        });
+        return NextResponse.json({ ...synced, paid_cents: paid, due_cents: due });
+      }
+    }
+    await writeAuditLog(supabase, user, {
+      action: "booking_updated",
+      entity_type: "booking",
+      entity_id: id,
+      booking_id: id,
+      summary: `Updated booking ${before?.booking_code || id.slice(0, 8)}`,
+      payload_before: before ? bookingAuditSnapshot(before as Record<string, unknown>) : null,
+      payload_after: bookingAuditSnapshot(data as Record<string, unknown>),
+    });
+    return NextResponse.json({ ...data, paid_cents: paid, due_cents: due });
+  }
+
+  await writeAuditLog(supabase, user, {
+    action: "booking_updated",
+    entity_type: "booking",
+    entity_id: id,
+    booking_id: id,
+    summary: `Updated booking ${before?.booking_code || id.slice(0, 8)}`,
+    payload_before: before ? bookingAuditSnapshot(before as Record<string, unknown>) : null,
+    payload_after: bookingAuditSnapshot(data as Record<string, unknown>),
+  });
   return NextResponse.json(data);
 }
 

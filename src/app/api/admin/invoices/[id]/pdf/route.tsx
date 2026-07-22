@@ -6,6 +6,7 @@ import { getAdminClient } from "@/lib/admin-api";
 import { InvoicePdfDocument, type InvoiceLinePdf } from "@/lib/invoice-pdf";
 import { VENUE_ADDRESS, ADMIN_VENUE_FALLBACK } from "@/lib/venue-constants";
 import { parseInvoiceBusinessValue } from "@/lib/invoice-business";
+import { normalizeStoredUkAddress } from "@/lib/uk-address";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!(await getAuthUserFromRequest(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -72,7 +73,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       status={inv.status}
       clientName={inv.client_name || "Client"}
       clientEmail={inv.client_email || ""}
-      clientAddress={inv.client_address}
+      clientAddress={normalizeStoredUkAddress(inv.client_address)}
       venueName={venueName}
       venueTagline={venueTagline}
       venueAddress={venueAddress || undefined}

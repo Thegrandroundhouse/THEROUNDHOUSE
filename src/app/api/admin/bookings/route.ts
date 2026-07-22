@@ -17,6 +17,32 @@ import {
   isEventDateInFutureLondon,
   todayLondonYYYYMMDD,
 } from "@/lib/booking-status-rules";
+import { normalizeStoredUkAddress } from "@/lib/uk-address";
+import {
+  buildBanquetingContract,
+  calcLineItems,
+  normalizeContractLineItems,
+} from "@/lib/build-banqueting-contract";
+import { parseInvoiceBusinessValue } from "@/lib/invoice-business";
+import { loadHireContractSettingsFromDb } from "@/lib/hire-contract-settings";
+import { saveBookingContractDraft } from "@/lib/booking-contract-draft";
+import type { ContractLineItem } from "@/lib/roundhouse-contract-types";
+
+function parseContractLineItems(raw: unknown): ContractLineItem[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const mapped: ContractLineItem[] = raw.map((row, i) => {
+    const r = row as Record<string, unknown>;
+    return {
+      id: typeof r.id === "string" && r.id.trim() ? r.id : `line-${i}`,
+      description: String(r.description || "Item"),
+      qty: Math.max(1, Math.round(Number(r.qty) || 1)),
+      unitCostCents: Math.max(0, Math.round(Number(r.unitCostCents) || 0)),
+      discountCents: Math.max(0, Math.round(Number(r.discountCents) || 0)),
+      included: r.included !== false,
+    };
+  });
+  return normalizeContractLineItems(mapped);
+}
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -126,6 +152,10 @@ export async function POST(request: Request) {
   }
   let package_name = body.package_name ?? null;
   let total_cents = body.total_cents ?? null;
+  const contractLineItems = parseContractLineItems(body.contract_line_items);
+  if (contractLineItems) {
+    total_cents = calcLineItems(contractLineItems).contractSumCents;
+  }
   let pkg_notes: string | null = null;
   if (total_cents == null && body.event_date) {
     const { data: dayRow } = await supabase
@@ -231,7 +261,7 @@ export async function POST(request: Request) {
       client_name: body.client_name ?? null,
       client_email: body.client_email,
       client_phone: body.client_phone ?? null,
-      client_address: body.client_address ?? null,
+      client_address: normalizeStoredUkAddress(body.client_address),
       event_date: body.event_date,
       event_slot_key,
       event_type: body.event_type ?? null,
@@ -286,7 +316,7 @@ export async function POST(request: Request) {
     await setupBookingPayments(supabase, data.id, {
       total_cents: data.total_cents,
       deposit_cents: data.deposit_cents,
-      balance_cents: data.balance_cents,
+      balance_cents: body.balance_cents ?? data.balance_cents,
       received_cents: received_cents && received_cents > 0 ? received_cents : null,
       received_label:
         typeof body.payment_received_label === "string" && body.payment_received_label.trim()
@@ -298,6 +328,34 @@ export async function POST(request: Request) {
     });
   } catch (payErr) {
     console.error("setupBookingPayments:", payErr);
+  }
+
+  if (contractLineItems?.length) {
+    try {
+      const { data: bizRow } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "invoice_business")
+        .maybeSingle();
+      const business = bizRow?.value ? parseInvoiceBusinessValue(bizRow.value) : null;
+      const hireSettings = await loadHireContractSettingsFromDb(supabase);
+      const { data: staff } = await supabase.from("staff").select("display_name").eq("user_id", user.id).maybeSingle();
+      const salesRep = staff?.display_name?.trim() || "";
+      const draft = await buildBanquetingContract(
+        supabase,
+        data as Record<string, unknown>,
+        business,
+        {
+          lineItems: contractLineItems,
+          paidCents: received_cents && received_cents > 0 ? received_cents : 0,
+          salesRep: salesRep || undefined,
+        },
+        hireSettings,
+      );
+      await saveBookingContractDraft(supabase, data.id, draft, user, { skipBackupIfEmpty: true });
+    } catch (draftErr) {
+      console.error("seed hire_contract_draft:", draftErr);
+    }
   }
 
   await writeAuditLog(supabase, user, {

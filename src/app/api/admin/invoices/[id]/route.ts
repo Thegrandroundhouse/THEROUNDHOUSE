@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { getAdminClient } from "@/lib/admin-api";
+import { normalizeStoredUkAddress } from "@/lib/uk-address";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!(await getAuthUserFromRequest(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -42,6 +43,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   ].forEach((k) => {
     if (body[k] !== undefined) u[k] = body[k];
   });
+  if (body.client_address !== undefined) {
+    u.client_address = normalizeStoredUkAddress(body.client_address);
+  }
   if (Array.isArray(body.line_items)) {
     const sub = (body.line_items as { line_total_cents?: number }[]).reduce((s, l) => s + (Number(l.line_total_cents) || 0), 0);
     u.subtotal_cents = sub;

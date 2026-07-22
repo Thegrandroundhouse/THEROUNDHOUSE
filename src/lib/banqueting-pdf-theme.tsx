@@ -277,10 +277,16 @@ export function PdfSectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 export function PdfMetaField({ label, value }: { label: string; value: string }) {
+  const lines = (value || "—").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const display = lines.length ? lines : ["—"];
   return (
     <View style={theme.gridCell}>
       <Text style={theme.label}>{label}</Text>
-      <Text style={theme.value}>{value || "—"}</Text>
+      {display.map((line, i) => (
+        <Text key={`${i}-${line}`} style={theme.value}>
+          {line}
+        </Text>
+      ))}
     </View>
   );
 }

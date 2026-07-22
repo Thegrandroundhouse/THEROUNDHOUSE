@@ -219,7 +219,13 @@ export function InvoicePdfDocument(props: InvoicePdfProps) {
             <Text style={styles.sectionTitle}>Bill to</Text>
             <Text style={styles.clientName}>{clientName || "—"}</Text>
             <Text style={styles.clientLine}>{clientEmail}</Text>
-            {clientAddress ? <Text style={styles.clientLine}>{clientAddress}</Text> : null}
+            {clientAddress
+              ? clientAddress.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line, i) => (
+                  <Text key={`${i}-${line}`} style={styles.clientLine}>
+                    {line}
+                  </Text>
+                ))
+              : null}
             {bookingRef ? <Text style={[styles.clientLine, { marginTop: 6 }]}>Booking ref: {bookingRef}</Text> : null}
           </View>
         </View>

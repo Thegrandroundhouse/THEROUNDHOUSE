@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth-api";
 import { getAdminClient } from "@/lib/admin-api";
+import { normalizeStoredUkAddress } from "@/lib/uk-address";
 
 function normalizeLines(raw: unknown): { description: string; detail?: string; quantity: number; unit_cents: number; line_total_cents: number }[] {
   if (!Array.isArray(raw)) return [];
@@ -102,6 +103,7 @@ export async function POST(request: Request) {
     id: string;
     client_name: string | null;
     client_email: string;
+    client_address: string | null;
     total_cents: number | null;
     event_date: string;
     package_name: string | null;
@@ -110,7 +112,7 @@ export async function POST(request: Request) {
   if (body.booking_id) {
     const { data: b } = await supabase
       .from("bookings")
-      .select("id, client_name, client_email, total_cents, event_date, package_name")
+      .select("id, client_name, client_email, client_address, total_cents, event_date, package_name")
       .eq("id", body.booking_id)
       .maybeSingle();
     if (b) booking = b as BookingRow;
@@ -149,7 +151,11 @@ export async function POST(request: Request) {
       line_items: lineItems,
       client_name: body.client_name ?? booking?.client_name ?? null,
       client_email: body.client_email ?? booking?.client_email ?? "",
-      client_address: body.client_address ?? null,
+      client_address: normalizeStoredUkAddress(
+        body.client_address !== undefined && body.client_address !== null && String(body.client_address).trim()
+          ? body.client_address
+          : booking?.client_address ?? null,
+      ),
       notes: body.notes ?? null,
       issued_date: issued,
       logo_url: logoUrl,

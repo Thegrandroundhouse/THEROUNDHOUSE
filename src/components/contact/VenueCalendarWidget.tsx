@@ -12,36 +12,52 @@ function localDateStr(year: number, monthIndex: number, day: number) {
 type VenueCalendarWidgetProps = { compact?: boolean; onSelectDate?: (dateStr: string) => void };
 
 export function VenueCalendarWidget({ compact, onSelectDate }: VenueCalendarWidgetProps = {}) {
-  const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth());
-  const [bookedSet, setBookedSet] = useState<Set<string>>(new Set());
-  const [partialSet, setPartialSet] = useState<Set<string>>(new Set());
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [month, setMonth] = useState(() => new Date().getMonth());
+  const [bookedSet, setBookedSet] = useState<Set<string>>(() => new Set());
+  const [partialSet, setPartialSet] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
   const [openDates, setOpenDates] = useState<string[]>([]);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     fetch(`/api/availability?year=${year}&month=${month}`)
       .then((res) => res.json())
       .then((data: { bookedDates?: string[]; partialDates?: string[] }) => {
+        if (cancelled) return;
         setBookedSet(new Set(data.bookedDates ?? []));
         setPartialSet(new Set(data.partialDates ?? []));
       })
       .catch(() => {
+        if (cancelled) return;
         setBookedSet(new Set());
         setPartialSet(new Set());
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [year, month]);
 
   useEffect(() => {
+    let cancelled = false;
     fetch("/api/availability/open-dates?limit=12")
       .then((res) => res.json())
-      .then((data: { dates?: string[] }) => setOpenDates(Array.isArray(data.dates) ? data.dates : []))
-      .catch(() => setOpenDates([]));
-  }, []);
+      .then((data: { dates?: string[] }) => {
+        if (!cancelled) setOpenDates(Array.isArray(data.dates) ? data.dates : []);
+      })
+      .catch(() => {
+        if (!cancelled) setOpenDates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [year, month]);
 
+  const today = new Date();
   const first = new Date(year, month, 1);
   const last = new Date(year, month + 1, 0);
   const firstDay = first.getDay();
@@ -181,7 +197,7 @@ export function VenueCalendarWidget({ compact, onSelectDate }: VenueCalendarWidg
         <p className="section-label text-gold">Availability</p>
         <h2 className="section-heading">Check our calendar</h2>
         <p className="calendar-intro">
-          Fully booked dates are greyed out. Gold-tinted days still have availability — one hall may be closed while others remain open, or some time slots may be free.
+          Fully booked dates are greyed out. Gold-tinted days still have availability — one hall may be closed while others remain open, or some time slots may be free. After you pick a date, the form shows which halls are available.
         </p>
         {content}
       </div>

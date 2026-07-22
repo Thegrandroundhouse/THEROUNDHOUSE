@@ -5,12 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { adminFetch } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
+import { ClientAddressFields } from "@/components/admin/ClientAddressFields";
+import { normalizeStoredUkAddress } from "@/lib/uk-address";
 
 type LineRow = { description: string; detail: string; qty: string; pounds: string };
 type BookingOpt = {
   id: string;
   client_name: string | null;
   client_email: string;
+  client_address?: string | null;
   event_date: string;
   total_cents: number | null;
   package_name: string | null;
@@ -70,7 +73,13 @@ export default function NewInvoicePage() {
   const fillFromBooking = (bookingId: string) => {
     const b = bookings.find((x) => x.id === bookingId);
     if (!b) return;
-    setForm((f) => ({ ...f, booking_id: bookingId, client_name: b.client_name || "", client_email: b.client_email }));
+    setForm((f) => ({
+      ...f,
+      booking_id: bookingId,
+      client_name: b.client_name || "",
+      client_email: b.client_email,
+      client_address: normalizeStoredUkAddress(b.client_address) || "",
+    }));
     if (b.total_cents) {
       setLines([{ description: b.package_name || "Venue & services", detail: `Event ${b.event_date}`, qty: "1", pounds: (b.total_cents / 100).toFixed(2) }]);
     }
@@ -315,8 +324,10 @@ export default function NewInvoicePage() {
               <input type="email" value={form.client_email} onChange={(e) => setForm((f) => ({ ...f, client_email: e.target.value }))} placeholder="billing@example.com" />
             </div>
             <div className="admin-form-group admin-form-full">
-              <label>Address (optional)</label>
-              <input value={form.client_address} onChange={(e) => setForm((f) => ({ ...f, client_address: e.target.value }))} placeholder="Billing address" />
+              <ClientAddressFields
+                value={form.client_address}
+                onChange={(client_address) => setForm((f) => ({ ...f, client_address }))}
+              />
             </div>
             <div className="admin-form-group">
               <label>Tax (£)</label>

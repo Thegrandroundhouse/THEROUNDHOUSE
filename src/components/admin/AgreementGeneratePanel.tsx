@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Link from "next/link";
 import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
+import { MoneyInput } from "@/components/admin/MoneyInput";
+import { ContractLineItemsEditor } from "@/components/admin/ContractLineItemsEditor";
+import { ClientAddressFields } from "@/components/admin/ClientAddressFields";
 import { AgreementPdfPreviewModal, useAgreementPdfPreview } from "@/components/admin/AgreementPdfPreviewModal";
 import { calcLineItems, formatGbp, applyBusinessBankToContract, hasContractBankDetails, applyLineItemTotalsToContract, resolveContractPaymentSummary } from "@/lib/build-banqueting-contract";
 import type { InvoiceBusinessPayload } from "@/app/api/admin/settings/invoice-business/route";
@@ -62,21 +65,13 @@ function PdfSectionAccordion({
   );
 }
 
-function poundsToCents(s: string): number {
-  const n = parseFloat(s.replace(/[^0-9.]/g, ""));
-  return Number.isFinite(n) ? Math.round(n * 100) : 0;
-}
-
-function centsToPounds(c: number): string {
-  return (c / 100).toFixed(2);
-}
-
 export function AgreementGeneratePanel({
   bookingId,
   templates,
   onGenerated,
   editContract,
   onEditConsumed,
+  onContractSaved,
 }: {
   bookingId: string;
   templates: Template[];
@@ -84,6 +79,8 @@ export function AgreementGeneratePanel({
   /** Load an existing hire contract back into the editor (creates a new PDF on generate). */
   editContract?: RoundhouseContractData | null;
   onEditConsumed?: () => void;
+  /** Fired after hire contract draft autosave (booking total stays in sync with line items). */
+  onContractSaved?: (draft: RoundhouseContractData) => void;
 }) {
   const { alert, confirm } = useAdminDialog();
   const pdfPreview = useAgreementPdfPreview();
@@ -136,12 +133,14 @@ export function AgreementGeneratePanel({
         body: JSON.stringify({ contract: payload }),
       });
       if (!r.ok) throw new Error(await parseAdminError(r, "Couldn’t save contract configuration"));
-      const d = (await r.json()) as { saved_at?: string | null };
+      const d = (await r.json()) as { saved_at?: string | null; draft?: RoundhouseContractData };
       setSavedAt(d.saved_at ?? new Date().toISOString());
       setSaveStatus("saved");
       void loadBackups();
+      if (d.draft) onContractSaved?.(d.draft);
+      else onContractSaved?.(payload);
     },
-    [bookingId, loadBackups],
+    [bookingId, loadBackups, onContractSaved],
   );
 
   const loadDraft = useCallback(() => {
@@ -321,32 +320,8 @@ export function AgreementGeneratePanel({
     }
   };
 
-  const updateLine = (id: string, patch: Partial<ContractLineItem>) => {
-    setDraft((d) => {
-      if (!d) return d;
-      const lineItems = d.lineItems.map((r) => (r.id === id ? { ...r, ...patch } : r));
-      return applyLineItemTotalsToContract({ ...d, lineItems });
-    });
-  };
-
-  const addLine = () => {
-    setDraft((d) => {
-      if (!d) return d;
-      return applyLineItemTotalsToContract({
-        ...d,
-        lineItems: [
-          ...d.lineItems,
-          {
-            id: `custom-${Date.now()}`,
-            description: "Additional item",
-            qty: 1,
-            unitCostCents: 0,
-            discountCents: 0,
-            included: true,
-          },
-        ],
-      });
-    });
+  const updateLineItems = (lineItems: ContractLineItem[]) => {
+    setDraft((d) => (d ? applyLineItemTotalsToContract({ ...d, lineItems }) : d));
   };
 
   const toggleIncludeItem = (id: string) => {
@@ -748,18 +723,20 @@ export function AgreementGeneratePanel({
             </div>
             <label className="admin-bkd-contract-pay-field">
               <span className="admin-bkd-contract-pay-label">Amount paid £</span>
-              <input
+              <MoneyInput
                 className="admin-table-inline-input"
-                value={centsToPounds(draft.paidCents ?? paymentSummary.paidCents)}
-                onChange={(e) => updatePaidCents(poundsToCents(e.target.value))}
+                cents={draft.paidCents ?? paymentSummary.paidCents}
+                onCentsChange={updatePaidCents}
+                aria-label="Amount paid"
               />
             </label>
             <label className="admin-bkd-contract-pay-field">
               <span className="admin-bkd-contract-pay-label">Balance due £</span>
-              <input
+              <MoneyInput
                 className="admin-table-inline-input"
-                value={centsToPounds(draft.balanceDueCents ?? paymentSummary.balanceDueCents)}
-                onChange={(e) => updateBalanceDueCents(poundsToCents(e.target.value))}
+                cents={draft.balanceDueCents ?? paymentSummary.balanceDueCents}
+                onCentsChange={updateBalanceDueCents}
+                aria-label="Balance due"
               />
             </label>
           </div>
@@ -803,7 +780,7 @@ export function AgreementGeneratePanel({
               {draft.client.address ? (
                 <div>
                   <dt>Address</dt>
-                  <dd>{draft.client.address}</dd>
+                  <dd style={{ whiteSpace: "pre-line" }}>{draft.client.address}</dd>
                 </div>
               ) : null}
               <div>
@@ -850,11 +827,12 @@ export function AgreementGeneratePanel({
               />
             </div>
             <div className="admin-form-group admin-form-full">
-              <label>Address</label>
-              <input
+              <ClientAddressFields
                 value={draft.client.address}
-                onChange={(e) => setDraft((d) => (d ? { ...d, client: { ...d.client, address: e.target.value } } : d))}
-                placeholder="Client address for the contract"
+                onChange={(address) =>
+                  setDraft((d) => (d ? { ...d, client: { ...d.client, address } } : d))
+                }
+                inputClassName="admin-settings-v2-input"
               />
             </div>
             <div className="admin-form-group">
@@ -921,77 +899,7 @@ export function AgreementGeneratePanel({
           <h4 className="admin-section-title" style={{ fontSize: "0.95rem" }}>
             Line items &amp; contract sum
           </h4>
-          <div className="admin-pay-table-wrap" style={{ marginBottom: "0.75rem" }}>
-            <table className="admin-pay-table admin-bkd-contract-lines">
-              <thead>
-                <tr>
-                  <th>Include</th>
-                  <th>Description</th>
-                  <th>Qty</th>
-                  <th>Unit £</th>
-                  <th>Discount £</th>
-                  <th>Line total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {draft.lineItems.map((row) => {
-                  const lineTotal = row.included ? row.qty * row.unitCostCents - row.discountCents : 0;
-                  return (
-                    <tr key={row.id}>
-                      <td>
-                        <input type="checkbox" checked={row.included} onChange={(e) => updateLine(row.id, { included: e.target.checked })} />
-                      </td>
-                      <td>
-                        <input
-                          className="admin-table-inline-input"
-                          value={row.description}
-                          onChange={(e) => updateLine(row.id, { description: e.target.value })}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          min={1}
-                          className="admin-table-inline-input"
-                          style={{ width: "3.5rem" }}
-                          value={row.qty}
-                          onChange={(e) => updateLine(row.id, { qty: Math.max(1, parseInt(e.target.value, 10) || 1) })}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="admin-table-inline-input"
-                          style={{ width: "5.5rem" }}
-                          value={centsToPounds(row.unitCostCents)}
-                          onChange={(e) => updateLine(row.id, { unitCostCents: poundsToCents(e.target.value) })}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="admin-table-inline-input"
-                          style={{ width: "5.5rem" }}
-                          value={centsToPounds(row.discountCents)}
-                          onChange={(e) => updateLine(row.id, { discountCents: poundsToCents(e.target.value) })}
-                        />
-                      </td>
-                      <td>{formatGbp(lineTotal)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <button type="button" className="admin-btn admin-btn-ghost admin-btn-sm" onClick={addLine}>
-            + Line item
-          </button>
-          <p style={{ marginTop: "0.75rem", fontWeight: 700 }}>
-            Contract sum: {formatGbp(totals.contractSumCents)}
-            {totals.discountTotalCents > 0 ? (
-              <span style={{ fontWeight: 400, color: "var(--color-text-muted)", marginLeft: "0.5rem" }}>
-                (discounts −{formatGbp(totals.discountTotalCents)})
-              </span>
-            ) : null}
-          </p>
+          <ContractLineItemsEditor lines={draft.lineItems} onChange={updateLineItems} />
 
           <div className="admin-hire-settings-accordions admin-bkd-contract-accordions">
             <details className="admin-hire-settings-accordion" open>
@@ -1199,11 +1107,12 @@ export function AgreementGeneratePanel({
                           />
                         </td>
                         <td>
-                          <input
+                          <MoneyInput
                             className="admin-table-inline-input"
                             style={{ width: "5.5rem" }}
-                            value={centsToPounds(row.amountCents)}
-                            onChange={(e) => updateScheduleRow(index, { amountCents: poundsToCents(e.target.value) })}
+                            cents={row.amountCents}
+                            onCentsChange={(amountCents) => updateScheduleRow(index, { amountCents })}
+                            aria-label="Schedule amount"
                           />
                         </td>
                         <td>
@@ -1234,11 +1143,10 @@ export function AgreementGeneratePanel({
               <div className="admin-form-grid" style={{ marginTop: "1rem" }}>
                 <div className="admin-form-group">
                   <label>Damage deposit (£)</label>
-                  <input
-                    value={centsToPounds(draft.paymentTerms.damageDepositCents)}
-                    onChange={(e) =>
-                      updatePaymentTermsPatch({ damageDepositCents: poundsToCents(e.target.value) })
-                    }
+                  <MoneyInput
+                    cents={draft.paymentTerms.damageDepositCents}
+                    onCentsChange={(damageDepositCents) => updatePaymentTermsPatch({ damageDepositCents })}
+                    aria-label="Damage deposit"
                   />
                 </div>
               </div>

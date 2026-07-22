@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { Booking } from "@/types/crm";
 import { BookingQuickPaymentForm } from "@/components/admin/BookingQuickPaymentForm";
+import { BookingLineItemsPanel } from "@/components/admin/BookingLineItemsPanel";
 import { bookingMoneyFromLedger } from "@/lib/booking-money-summary";
 
 type PaymentsSummary = {
@@ -27,6 +28,8 @@ export function BookingSummaryOverview({
   onPaymentRecorded,
   onOpenPayments,
   packageDetail,
+  onContractSumChange,
+  onOfferPaymentResync,
 }: {
   bookingId: string;
   booking: Booking;
@@ -41,6 +44,8 @@ export function BookingSummaryOverview({
   onPaymentRecorded: () => void;
   onOpenPayments: () => void;
   packageDetail: { id: string; name: string } | null;
+  onContractSumChange?: (contractSumCents: number) => void;
+  onOfferPaymentResync?: (contractSumCents: number) => void;
 }) {
   const totalCents = poundsInputToCents(totalPounds) ?? booking.total_cents ?? null;
   const depositCents = poundsInputToCents(depositPounds) ?? booking.deposit_cents ?? null;
@@ -84,6 +89,12 @@ export function BookingSummaryOverview({
           </div>
         </div>
       ) : null}
+
+      <BookingLineItemsPanel
+        bookingId={bookingId}
+        onSumChange={onContractSumChange}
+        onOfferPaymentResync={onOfferPaymentResync}
+      />
 
       <section className="admin-bks-block admin-bks-block--pay">
         <h3 className="admin-bks-block-title">Quick payment</h3>

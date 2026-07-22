@@ -238,3 +238,123 @@ export function isHallBlockedOnDate(
   if (spaceId == null) return info.wholeVenue;
   return info.hallIds.includes(spaceId);
 }
+
+export type HallDayStatus = "available" | "closed" | "booked" | "limited";
+
+export type HallDayAvailability = {
+  id: string;
+  name: string;
+  capacity: number | null;
+  status: HallDayStatus;
+  /** Preferable for enquiry (not closed/fully booked). */
+  selectable: boolean;
+  label: string;
+};
+
+/** Per-hall status for a public date (blocks + bookings). */
+export async function hallAvailabilityForDate(
+  supabase: SupabaseClient,
+  dateStr: string,
+  blocks: CalendarBlockRow[],
+): Promise<HallDayAvailability[]> {
+  const halls = await listVenueHalls(supabase);
+  if (!halls.length) return [];
+
+  const { data: bookingsRaw } = await supabase
+    .from("bookings")
+    .select("id, event_slot_key, space_id")
+    .eq("event_date", dateStr)
+    .in("status", ["pending", "confirmed", "completed"]);
+
+  const ids = (bookingsRaw ?? []).map((b) => b.id as string);
+  const hallMap = new Map<string, string[]>();
+  if (ids.length) {
+    const { data: links } = await supabase.from("booking_spaces").select("booking_id, space_id").in("booking_id", ids);
+    for (const row of links ?? []) {
+      const bid = row.booking_id as string;
+      if (!hallMap.has(bid)) hallMap.set(bid, []);
+      hallMap.get(bid)!.push(row.space_id as string);
+    }
+    for (const b of bookingsRaw ?? []) {
+      const bid = b.id as string;
+      if (!hallMap.has(bid) || hallMap.get(bid)!.length === 0) {
+        const legacy = b.space_id ? [b.space_id as string] : [];
+        if (legacy.length) hallMap.set(bid, legacy);
+      }
+    }
+  }
+
+  const dayBookings = (bookingsRaw ?? []).map((b) => ({
+    event_slot_key: (b.event_slot_key as string | null) ?? null,
+    hall_ids: hallMap.get(b.id as string) ?? [],
+  }));
+
+  const wholeDayCoversAll = dayBookings.some(
+    (b) =>
+      (!b.hall_ids.length || b.hall_ids.length >= halls.length) &&
+      (b.event_slot_key == null ||
+        String(b.event_slot_key).trim() === "" ||
+        String(b.event_slot_key).trim() === "whole_day"),
+  );
+
+  return halls.map((h) => {
+    if (isHallBlockedOnDate(blocks, dateStr, h.id)) {
+      return {
+        id: h.id,
+        name: h.name,
+        capacity: h.capacity,
+        status: "closed" as const,
+        selectable: false,
+        label: "Closed",
+      };
+    }
+    if (wholeDayCoversAll) {
+      return {
+        id: h.id,
+        name: h.name,
+        capacity: h.capacity,
+        status: "booked" as const,
+        selectable: false,
+        label: "Booked",
+      };
+    }
+
+    const hallBookings = dayBookings.filter((b) => !b.hall_ids.length || b.hall_ids.includes(h.id));
+    if (!hallBookings.length) {
+      return {
+        id: h.id,
+        name: h.name,
+        capacity: h.capacity,
+        status: "available" as const,
+        selectable: true,
+        label: "Available",
+      };
+    }
+
+    const hallWholeDay = hallBookings.some(
+      (b) =>
+        b.event_slot_key == null ||
+        String(b.event_slot_key).trim() === "" ||
+        String(b.event_slot_key).trim() === "whole_day",
+    );
+    if (hallWholeDay) {
+      return {
+        id: h.id,
+        name: h.name,
+        capacity: h.capacity,
+        status: "booked" as const,
+        selectable: false,
+        label: "Booked",
+      };
+    }
+
+    return {
+      id: h.id,
+      name: h.name,
+      capacity: h.capacity,
+      status: "limited" as const,
+      selectable: true,
+      label: "Some times taken",
+    };
+  });
+}

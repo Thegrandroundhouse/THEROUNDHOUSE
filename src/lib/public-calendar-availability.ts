@@ -6,9 +6,73 @@ import {
   loadCalendarBlocks,
   type CalendarBlockRow,
 } from "@/lib/booking-halls";
-import type { BookingSlotsConfig } from "@/lib/booking-slots";
+import { isWholeDaySlotKey, type BookingSlotsConfig } from "@/lib/booking-slots";
 
 type BookingRow = { event_date: string; event_slot_key: string | null; hall_ids: string[] };
+
+export type ActiveDateHold = {
+  date: string;
+  space_id: string | null;
+  event_slot_key: string | null;
+};
+
+/** Active (unreleased, not expired) date holds. */
+export async function loadActiveDateHolds(
+  supabase: SupabaseClient,
+  startStr: string,
+  endStr: string,
+): Promise<ActiveDateHold[]> {
+  const nowIso = new Date().toISOString();
+  const { data } = await supabase
+    .from("date_holds")
+    .select("hold_date, space_id, event_slot_key, expires_at")
+    .is("released_at", null)
+    .gte("hold_date", startStr)
+    .lte("hold_date", endStr);
+
+  return (data ?? [])
+    .filter((r) => {
+      const exp = r.expires_at as string | null;
+      return !exp || exp > nowIso;
+    })
+    .map((r) => ({
+      date: r.hold_date as string,
+      space_id: (r.space_id as string | null) ?? null,
+      event_slot_key: (r.event_slot_key as string | null) ?? null,
+    }));
+}
+
+/** Whole-day holds only — same shape as manual calendar closes. */
+export async function loadActiveDateHoldsAsBlocks(
+  supabase: SupabaseClient,
+  startStr: string,
+  endStr: string,
+): Promise<CalendarBlockRow[]> {
+  const holds = await loadActiveDateHolds(supabase, startStr, endStr);
+  return holds
+    .filter((h) => isWholeDaySlotKey(h.event_slot_key))
+    .map((h) => ({
+      date: h.date,
+      space_id: h.space_id,
+    }));
+}
+
+/** Slot-only holds (not whole-day) — reduce public slot capacity. */
+export function slotHoldCountsByDate(holds: ActiveDateHold[]): Map<string, Record<string, number>> {
+  const map = new Map<string, Record<string, number>>();
+  for (const h of holds) {
+    if (isWholeDaySlotKey(h.event_slot_key)) continue;
+    const key = String(h.event_slot_key).trim();
+    if (!map.has(h.date)) map.set(h.date, {});
+    const counts = map.get(h.date)!;
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return map;
+}
+
+export function mergeCalendarBlocks(...lists: CalendarBlockRow[][]): CalendarBlockRow[] {
+  return lists.flat();
+}
 
 /** Whole venue manually closed, or every hall manually closed. */
 export function isDateFullyManuallyBlocked(
@@ -51,6 +115,7 @@ export async function isDateOpenForPublicEnquiryHalls(
   config: BookingSlotsConfig,
   blocks: CalendarBlockRow[],
   allHallIds: string[],
+  slotHoldCounts: Record<string, number> = {},
 ): Promise<boolean> {
   if (isDateFullyManuallyBlocked(blocks, dateStr, allHallIds)) return false;
   if (!hasAnyHallOpenManually(blocks, dateStr, allHallIds)) return false;
@@ -71,11 +136,11 @@ export async function isDateOpenForPublicEnquiryHalls(
     .eq("event_date", dateStr)
     .in("status", ["pending", "confirmed", "completed"]);
   const list = rows ?? [];
-  if (list.some((b) => !b.event_slot_key || String(b.event_slot_key).trim() === "")) {
+  if (list.some((b) => isWholeDaySlotKey(b.event_slot_key as string | null))) {
     return false;
   }
   const counts: Record<string, number> = {};
-  for (const s of config.slots) counts[s.key] = 0;
+  for (const s of config.slots) counts[s.key] = slotHoldCounts[s.key] ?? 0;
   for (const b of list) {
     const k = b.event_slot_key as string;
     if (k in counts) counts[k] += 1;
@@ -91,7 +156,15 @@ export async function computePublicMonthAvailability(
 ): Promise<{ fullyBooked: Set<string>; partialDates: Set<string> }> {
   const halls = await listVenueHalls(supabase);
   const allHallIds = halls.map((h) => h.id);
-  const blocks = await loadCalendarBlocks(supabase, startStr, endStr);
+  const [manualBlocks, holds] = await Promise.all([
+    loadCalendarBlocks(supabase, startStr, endStr),
+    loadActiveDateHolds(supabase, startStr, endStr),
+  ]);
+  const holdBlocks = holds
+    .filter((h) => isWholeDaySlotKey(h.event_slot_key))
+    .map((h) => ({ date: h.date, space_id: h.space_id }));
+  const blocks = mergeCalendarBlocks(manualBlocks, holdBlocks);
+  const holdsBySlot = slotHoldCountsByDate(holds);
 
   const { data: bookingsRaw } = await supabase
     .from("bookings")
@@ -126,10 +199,12 @@ export async function computePublicMonthAvailability(
 
   const fullyBooked = new Set<string>();
   const partialDates = new Set<string>();
+  const slotsEnabled = config.enabled && config.slots.length > 0;
 
   const datesInRange = new Set<string>();
   for (const b of blocks) datesInRange.add(b.date);
   for (const b of bookingRows) datesInRange.add(b.event_date);
+  for (const h of holds) datesInRange.add(h.date);
 
   const [y1, m1, d1] = startStr.split("-").map(Number);
   const [y2, m2, d2] = endStr.split("-").map(Number);
@@ -150,54 +225,54 @@ export async function computePublicMonthAvailability(
     }
 
     const dayBookings = bookingRows.filter((b) => b.event_date === date);
-    let hallFullyTaken = false;
+    const daySlotHolds = holdsBySlot.get(date) ?? {};
+
     if (allHallIds.length) {
-      const openHalls = allHallIds.filter((hid) => {
-        const info = blocksForDate(blocks, date);
-        if (info.wholeVenue || info.hallIds.includes(hid)) return false;
-        return !hallIsBookedOnDate(hid, dayBookings);
-      });
-      if (openHalls.length === 0 && (dayBookings.length > 0 || isDatePartiallyManuallyBlocked(blocks, date, allHallIds))) {
-        hallFullyTaken = true;
-      }
-      if (openHalls.length === 0 && isDatePartiallyManuallyBlocked(blocks, date, allHallIds)) {
-        fullyBooked.add(date);
-        continue;
-      }
       if (isDatePartiallyManuallyBlocked(blocks, date, allHallIds)) {
         partialDates.add(date);
       }
-    } else {
-      if (dayBookings.length > 0 && (!config.enabled || !config.slots.length)) {
-        fullyBooked.add(date);
-        continue;
-      }
-    }
 
-    if (hallFullyTaken && dayBookings.length > 0) {
+      // Whole-day mode only: if every hall is taken by a booking, day is full.
+      // With time slots, hall bookings for one slot must not wipe remaining slots.
+      if (!slotsEnabled) {
+        const openHalls = allHallIds.filter((hid) => {
+          const info = blocksForDate(blocks, date);
+          if (info.wholeVenue || info.hallIds.includes(hid)) return false;
+          return !hallIsBookedOnDate(hid, dayBookings);
+        });
+        if (openHalls.length === 0 && dayBookings.length > 0) {
+          fullyBooked.add(date);
+          continue;
+        }
+      }
+    } else if (!slotsEnabled && dayBookings.length > 0) {
       fullyBooked.add(date);
       continue;
     }
 
-    if (!config.enabled || !config.slots.length) {
+    if (!slotsEnabled) {
       if (dayBookings.length > 0) fullyBooked.add(date);
       continue;
     }
 
-    if (dayBookings.some((b) => !b.event_slot_key || String(b.event_slot_key).trim() === "")) {
+    if (dayBookings.some((b) => isWholeDaySlotKey(b.event_slot_key))) {
       fullyBooked.add(date);
       continue;
     }
 
     const counts: Record<string, number> = {};
-    for (const s of config.slots) counts[s.key] = 0;
+    for (const s of config.slots) counts[s.key] = daySlotHolds[s.key] ?? 0;
     for (const b of dayBookings) {
       const k = b.event_slot_key!;
       if (k in counts) counts[k] += 1;
     }
     const allFull = config.slots.every((s) => (counts[s.key] ?? 0) >= config.maxPerSlot);
+    const anyTaken =
+      dayBookings.length > 0 ||
+      Object.values(daySlotHolds).some((n) => n > 0) ||
+      isDatePartiallyManuallyBlocked(blocks, date, allHallIds);
     if (allFull) fullyBooked.add(date);
-    else if (dayBookings.length > 0) partialDates.add(date);
+    else if (anyTaken) partialDates.add(date);
   }
 
   for (const d of partialDates) {

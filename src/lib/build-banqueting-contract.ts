@@ -29,6 +29,7 @@ import {
   VENUE_LEGAL_NAME,
   VENUE_WEBSITE,
 } from "@/lib/venue-constants";
+import { normalizeStoredUkAddress } from "@/lib/uk-address";
 
 function gbp(cents: number): string {
   return `£${(cents / 100).toFixed(2)}`;
@@ -364,7 +365,10 @@ export async function buildBanquetingContract(
       name: String(booking.client_name || "Client"),
       phone: overrides.clientPhone || String(booking.client_phone || ""),
       email: String(booking.client_email || ""),
-      address: overrides.clientAddress || String(booking.client_address || "").trim(),
+      address:
+        normalizeStoredUkAddress(overrides.clientAddress) ||
+        normalizeStoredUkAddress(String(booking.client_address || "")) ||
+        "",
     },
     event: {
       dateLabel: formatEventDate(booking.event_date as string),

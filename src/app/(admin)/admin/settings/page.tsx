@@ -10,6 +10,7 @@ import { DEFAULT_BOOKING_SLOTS } from "@/lib/booking-slots";
 import { VENUE_ADDRESS } from "@/lib/venue-constants";
 import { HallsSettingsTab } from "@/components/admin/HallsSettingsTab";
 import { HireContractSettingsTab } from "@/components/admin/HireContractSettingsTab";
+import { IntegerInput } from "@/components/admin/MoneyInput";
 import type { HireContractSettingsPayload } from "@/lib/hire-contract-settings";
 import { HIRE_CONTRACT_SETTINGS_DEFAULTS } from "@/lib/hire-contract-settings";
 
@@ -557,18 +558,16 @@ export default function SettingsPage() {
                       </label>
                       <div className="admin-slots-settings-field">
                         <label htmlFor="slots-max-per">Max bookings per slot</label>
-                        <input
+                        <IntegerInput
                           id="slots-max-per"
-                          type="number"
                           min={1}
                           max={20}
                           value={bookingSlots.maxPerSlot}
-                          onChange={(e) =>
-                            setBookingSlots((s) =>
-                              s ? { ...s, maxPerSlot: Math.min(20, Math.max(1, parseInt(e.target.value, 10) || 1)) } : s,
-                            )
+                          onChange={(maxPerSlot) =>
+                            setBookingSlots((s) => (s ? { ...s, maxPerSlot } : s))
                           }
                           className="admin-slots-settings-input admin-settings-v2-input-narrow"
+                          aria-label="Max bookings per slot"
                         />
                       </div>
                     </article>

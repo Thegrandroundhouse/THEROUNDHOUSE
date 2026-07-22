@@ -12818,6 +12818,23 @@ section.bg-ink p.section-sub,
   font-size: 1.05rem;
   font-weight: 700;
 }
+.admin-bk-money-input {
+  width: 6.5rem;
+  max-width: 100%;
+  font-weight: 700;
+  font-size: 1rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.admin-bk-money-input--paid {
+  color: #1a7a4c;
+}
+.admin-bk-money-input--due {
+  color: #8a4b28;
+}
+.admin-pay-amt .admin-bk-money-input:disabled {
+  opacity: 0.65;
+}
 
 @media (max-width: 640px) {
   .admin-money-strip {
@@ -13056,6 +13073,21 @@ section.bg-ink p.section-sub,
   font-size: 1.05rem !important;
   padding: 0.7rem 0.85rem !important;
   min-height: 2.75rem;
+}
+.admin-client-address-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--color-muted, #6b7280);
+  line-height: 1.35;
+}
+.admin-client-address-fields .admin-form-grid {
+  margin: 0;
+}
+.admin-bkd-quick-address {
+  width: 100%;
+}
+.admin-bkd-quick-address .admin-client-address-hint {
+  margin-top: 0.25rem;
 }
 .admin-bk-more-details {
   border: 1px dashed var(--color-border);
@@ -13827,6 +13859,21 @@ section.bg-ink p.section-sub,
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--color-gold-dark);
+}
+.admin-bks-block-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.35rem;
+}
+.admin-bks-lines-status {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+.admin-bks-block--lines {
+  margin-bottom: 1rem;
 }
 .admin-bks-collect {
   margin-bottom: 0.85rem;

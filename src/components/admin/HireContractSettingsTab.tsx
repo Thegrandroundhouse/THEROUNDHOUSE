@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { adminFetch, parseAdminError } from "@/lib/admin-api-client";
 import { useAdminDialog } from "@/components/admin/AdminDialogContext";
+import { IntegerInput, PoundsInput } from "@/components/admin/MoneyInput";
 import type { SettingsBackupRow } from "@/lib/settings-backup";
 import {
   HIRE_CONTRACT_SETTINGS_DEFAULTS,
@@ -186,7 +187,11 @@ export function HireContractSettingsTab({
   };
 
   const addPriceRow = (key: "additionalOptions" | "additionalHours") => {
-    setForm((f) => ({ ...f, [key]: [...f[key], { label: "New item", price: "£0.00" }] }));
+    setForm((f) => ({ ...f, [key]: [...f[key], { label: "", price: "" }] }));
+  };
+
+  const removePriceRow = (key: "additionalOptions" | "additionalHours", index: number) => {
+    setForm((f) => ({ ...f, [key]: f[key].filter((_, i) => i !== index) }));
   };
 
   const updatePaymentTemplate = (index: number, patch: Partial<HireContractPaymentMilestoneTemplate>) => {
@@ -372,6 +377,14 @@ export function HireContractSettingsTab({
                   placeholder="Price"
                   onChange={(e) => updatePriceRow("additionalOptions", index, { price: e.target.value })}
                 />
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-ghost admin-btn-sm"
+                  onClick={() => removePriceRow("additionalOptions", index)}
+                  aria-label={`Remove option row ${index + 1}`}
+                >
+                  Remove
+                </button>
               </div>
             ))}
           </div>
@@ -393,13 +406,23 @@ export function HireContractSettingsTab({
                 <input
                   className="admin-settings-v2-input"
                   value={row.label}
+                  placeholder="Label"
                   onChange={(e) => updatePriceRow("additionalHours", index, { label: e.target.value })}
                 />
                 <input
                   className="admin-settings-v2-input"
                   value={row.price}
+                  placeholder="Price"
                   onChange={(e) => updatePriceRow("additionalHours", index, { price: e.target.value })}
                 />
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-ghost admin-btn-sm"
+                  onClick={() => removePriceRow("additionalHours", index)}
+                  aria-label={`Remove hours row ${index + 1}`}
+                >
+                  Remove
+                </button>
               </div>
             ))}
           </div>
@@ -437,16 +460,13 @@ export function HireContractSettingsTab({
                     placeholder="Label"
                     onChange={(e) => updatePaymentTemplate(index, { label: e.target.value })}
                   />
-                  <input
+                  <IntegerInput
                     className="admin-settings-v2-input"
-                    type="number"
                     min={0}
                     max={100}
                     value={row.percentOfContract}
-                    placeholder="%"
-                    onChange={(e) =>
-                      updatePaymentTemplate(index, { percentOfContract: Math.max(0, parseInt(e.target.value, 10) || 0) })
-                    }
+                    onChange={(percentOfContract) => updatePaymentTemplate(index, { percentOfContract })}
+                    aria-label="Percent of contract"
                   />
                   <input
                     className="admin-settings-v2-input"
@@ -467,15 +487,11 @@ export function HireContractSettingsTab({
           <div className="admin-settings-v2-fields" style={{ marginTop: "1rem" }}>
             <div className="admin-settings-v2-field">
               <label>Refundable damage deposit (£)</label>
-              <input
+              <PoundsInput
                 className="admin-settings-v2-input"
-                type="number"
-                min={0}
-                step={1}
                 value={form.damageDepositPounds}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, damageDepositPounds: Math.max(0, parseFloat(e.target.value) || 0) }))
-                }
+                onChange={(damageDepositPounds) => setForm((f) => ({ ...f, damageDepositPounds }))}
+                aria-label="Damage deposit pounds"
               />
             </div>
           </div>

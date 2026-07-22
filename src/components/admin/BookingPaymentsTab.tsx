@@ -213,6 +213,16 @@ export function BookingPaymentsTab({
               </table>
             </div>
             <p className="admin-bkp-footnote">
+              Contract total or lines changed?{" "}
+              <button
+                type="button"
+                className="admin-link-btn"
+                disabled={setupPaymentsLoading}
+                onClick={setupPaymentsSchedule}
+              >
+                {setupPaymentsLoading ? "Updating…" : "Update 4-instalment plan from contract"}
+              </button>
+              {" · "}
               <Link href={`/admin/payments/booking/${bookingId}`} className="admin-link">
                 Open full payment ledger →
               </Link>
@@ -229,6 +239,9 @@ export function BookingPaymentsTab({
             >
               {setupPaymentsLoading ? "Creating…" : "Create 4-instalment plan"}
             </button>
+            <p className="admin-bks-hint" style={{ marginTop: "0.75rem" }}>
+              You’ll confirm the line-item breakdown and each 25% payment before it’s created.
+            </p>
           </div>
         ) : (
           <p className="admin-bkp-empty-text">Payment data couldn&apos;t load — refresh the page.</p>

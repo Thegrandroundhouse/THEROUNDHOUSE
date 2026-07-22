@@ -107,6 +107,8 @@ export async function saveBookingContractDraft(
     .update({
       hire_contract_draft: normalized as unknown as Record<string, unknown>,
       hire_contract_draft_updated_at: now,
+      // Keep list / payments total aligned with configured line items.
+      total_cents: normalized.contractSumCents,
     })
     .eq("id", bookingId);
   if (error) throw new Error(error.message);

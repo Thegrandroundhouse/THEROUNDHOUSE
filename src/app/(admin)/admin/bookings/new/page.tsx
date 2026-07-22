@@ -11,6 +11,13 @@ import {
   BOOKING_COMPLETED_FUTURE_EVENT_MESSAGE,
   isEventDateInFutureLondon,
 } from "@/lib/booking-status-rules";
+import { ClientAddressFields } from "@/components/admin/ClientAddressFields";
+import {
+  ContractLineItemsEditor,
+  newContractLine,
+} from "@/components/admin/ContractLineItemsEditor";
+import { calcLineItems, normalizeContractLineItems, formatGbp } from "@/lib/build-banqueting-contract";
+import type { ContractLineItem } from "@/lib/roundhouse-contract-types";
 
 const STATUS_OPTIONS: BookingStatus[] = ["pending", "confirmed", "cancelled", "completed"];
 
@@ -22,6 +29,7 @@ type Pkg = {
   base_price_cents: number | null;
   active?: boolean;
   event_slot_keys?: string[] | null;
+  line_items?: { label?: string; description?: string; amount_cents?: number }[] | null;
 };
 
 type PriceSource = {
@@ -46,6 +54,22 @@ function poundsToCents(s: string): number | null {
 function centsToPounds(c: number | null): string {
   if (c == null) return "";
   return (c / 100).toFixed(2);
+}
+
+function linesFromPackage(p: Pkg): ContractLineItem[] {
+  if (Array.isArray(p.line_items) && p.line_items.length > 0) {
+    return p.line_items.map((row, i) =>
+      newContractLine({
+        id: `pkg-${i}`,
+        description: [row.label, row.description].filter(Boolean).join(" — ") || "Package item",
+        unitCostCents: Number(row.amount_cents) || 0,
+      }),
+    );
+  }
+  if (p.base_price_cents != null && p.base_price_cents > 0) {
+    return [newContractLine({ id: "pkg-total", description: p.name || "Venue hire", unitCostCents: p.base_price_cents })];
+  }
+  return [newContractLine({ description: p.name || "Venue hire" })];
 }
 
 function NewBookingForm() {
@@ -83,9 +107,6 @@ function NewBookingForm() {
   const [halls, setHalls] = useState<{ id: string; name: string }[]>([]);
   const [selectedHallIds, setSelectedHallIds] = useState<string[]>([]);
   const prefillSlotKey = useRef<string | null>(null);
-
-  const slotsMultiMode = slotConfig.enabled && slotConfig.slots.length > 0;
-
   const [form, setForm] = useState({
     client_name: "",
     client_email: "",
@@ -105,6 +126,20 @@ function NewBookingForm() {
     notes: "",
     enquiry_id: "",
   });
+  const [lineItems, setLineItems] = useState<ContractLineItem[]>(() => [newContractLine()]);
+
+  const slotsMultiMode = slotConfig.enabled && slotConfig.slots.length > 0;
+
+  const lineTotals = useMemo(() => calcLineItems(normalizeContractLineItems(lineItems)), [lineItems]);
+
+  const setLinesAndTotal = useCallback((lines: ContractLineItem[]) => {
+    const normalized = normalizeContractLineItems(lines);
+    setLineItems(normalized);
+    setForm((f) => ({
+      ...f,
+      total_pounds: centsToPounds(calcLineItems(normalized).contractSumCents),
+    }));
+  }, []);
 
   useEffect(() => {
     adminFetch("/api/admin/spaces")
@@ -313,7 +348,21 @@ function NewBookingForm() {
       .then((data: PriceSource | null) => {
         setPriceSource(data ?? null);
         if (data?.suggested_total_cents != null) {
-          setForm((f) => (f.total_pounds ? f : { ...f, total_pounds: centsToPounds(data.suggested_total_cents!) }));
+          setForm((f) => {
+            if (f.total_pounds) return f;
+            return { ...f, total_pounds: centsToPounds(data.suggested_total_cents!) };
+          });
+          setLineItems((prev) => {
+            const hasMoney = calcLineItems(normalizeContractLineItems(prev)).contractSumCents > 0;
+            if (hasMoney) return prev;
+            const next = [
+              newContractLine({
+                description: "Venue hire",
+                unitCostCents: data.suggested_total_cents!,
+              }),
+            ];
+            return next;
+          });
         }
       })
       .catch((err) => {
@@ -328,11 +377,37 @@ function NewBookingForm() {
   }, [form.event_date, fetchPriceForDate]);
 
   const computedBalancePounds = useMemo(() => {
-    const total = poundsToCents(form.total_pounds);
+    const total = lineTotals.contractSumCents || poundsToCents(form.total_pounds);
     const deposit = poundsToCents(form.deposit_pounds);
     if (total == null || deposit == null || total <= 0) return "";
     return centsToPounds(Math.max(0, total - deposit));
-  }, [form.total_pounds, form.deposit_pounds]);
+  }, [lineTotals.contractSumCents, form.total_pounds, form.deposit_pounds]);
+
+  // Keep a single default line’s description in sync with the chosen slot / whole day.
+  useEffect(() => {
+    let label = "";
+    if (wholeDay) {
+      label = "Full venue (whole day)";
+    } else if (eventSlotKey) {
+      const slot =
+        slotRows.find((s) => s.key === eventSlotKey) || slotConfig.slots.find((s) => s.key === eventSlotKey);
+      if (slot) label = `${slot.label}${slot.timeLabel ? ` · ${slot.timeLabel}` : ""}`;
+    }
+    if (!label) return;
+    setLineItems((prev) => {
+      if (prev.length !== 1 || !prev[0]) return prev;
+      const d = prev[0].description.trim();
+      const auto =
+        !d ||
+        d === "Venue hire" ||
+        d === "Full venue (whole day)" ||
+        slotConfig.slots.some(
+          (s) => d === s.label || d === `${s.label}${s.timeLabel ? ` · ${s.timeLabel}` : ""}`,
+        );
+      if (!auto || d === label) return prev;
+      return [{ ...prev[0], description: label }];
+    });
+  }, [wholeDay, eventSlotKey, slotRows, slotConfig.slots]);
 
   useEffect(() => {
     if (!form.balance_pounds.trim() && computedBalancePounds) {
@@ -379,7 +454,7 @@ function NewBookingForm() {
       await alert(BOOKING_COMPLETED_FUTURE_EVENT_MESSAGE, { title: "Can’t create as completed" });
       return;
     }
-    const total_cents = poundsToCents(form.total_pounds);
+    const total_cents = calcLineItems(normalizeContractLineItems(lineItems)).contractSumCents;
     const deposit_cents = poundsToCents(form.deposit_pounds);
     const balance_cents = poundsToCents(form.balance_pounds || computedBalancePounds);
     const payment_received_cents = poundsToCents(form.payment_received_pounds);
@@ -398,6 +473,7 @@ function NewBookingForm() {
           total_cents,
           deposit_cents,
           balance_cents,
+          contract_line_items: normalizeContractLineItems(lineItems),
           record_deposit_received:
             payment_received_cents != null &&
             payment_received_cents > 0 &&
@@ -488,13 +564,9 @@ function NewBookingForm() {
               <input className="admin-bk-simple-input" type="tel" value={form.client_phone} onChange={(e) => setForm((f) => ({ ...f, client_phone: e.target.value }))} placeholder="07…" />
             </div>
             <div className="admin-form-group admin-form-full">
-              <label>Address</label>
-              <textarea
-                className="admin-bk-simple-input"
-                rows={2}
+              <ClientAddressFields
                 value={form.client_address}
-                onChange={(e) => setForm((f) => ({ ...f, client_address: e.target.value }))}
-                placeholder="Client address — appears on the hire contract PDF"
+                onChange={(client_address) => setForm((f) => ({ ...f, client_address }))}
               />
             </div>
           </div>
@@ -570,10 +642,11 @@ function NewBookingForm() {
                   setPackageId(pid);
                   const p = packages.find((x) => x.id === pid);
                   if (p) {
+                    const lines = linesFromPackage(p);
+                    setLinesAndTotal(lines);
                     setForm((f) => ({
                       ...f,
                       package_name: p.name,
-                      total_pounds: p.base_price_cents != null ? centsToPounds(p.base_price_cents) : f.total_pounds,
                     }));
                   }
                 }}
@@ -685,18 +758,17 @@ function NewBookingForm() {
 
         <section className="admin-card admin-bk-simple-card">
           <h2 className="admin-section-title">Payment</h2>
-          <p className="admin-bk-simple-lead">How much is the booking worth, and did they pay anything today?</p>
-          <div className="admin-form-grid admin-bk-simple-grid">
+          <p className="admin-bk-simple-lead">
+            Break down the booking with line items and discounts — same as Configure hire contract on the booking. These lines are saved onto the hire contract draft when you create the booking.
+          </p>
+          <ContractLineItemsEditor lines={lineItems} onChange={setLinesAndTotal} />
+          <div className="admin-form-grid admin-bk-simple-grid" style={{ marginTop: "1rem" }}>
             <div className="admin-form-group">
-              <label>Contract total (£)</label>
-              <input
-                className="admin-bk-simple-input"
-                type="text"
-                inputMode="decimal"
-                value={form.total_pounds}
-                onChange={(e) => setForm((f) => ({ ...f, total_pounds: e.target.value }))}
-                placeholder="e.g. 5000.00"
-              />
+              <label>Contract total</label>
+              <p className="admin-bk-simple-input" style={{ margin: 0, display: "flex", alignItems: "center", fontWeight: 700 }}>
+                {formatGbp(lineTotals.contractSumCents)}
+              </p>
+              <span className="admin-vnd-new-hint">Calculated from line items above</span>
             </div>
             <div className="admin-form-group">
               <label>Money received today (£)</label>
@@ -717,7 +789,25 @@ function NewBookingForm() {
               <button
                 type="button"
                 className="admin-btn admin-btn-ghost admin-btn-sm"
-                onClick={() => setForm((f) => ({ ...f, total_pounds: centsToPounds(priceSource.suggested_total_cents) }))}
+                onClick={() => {
+                  const cents = priceSource.suggested_total_cents!;
+                  const slot =
+                    !wholeDay && eventSlotKey
+                      ? slotRows.find((s) => s.key === eventSlotKey) ||
+                        slotConfig.slots.find((s) => s.key === eventSlotKey)
+                      : null;
+                  const desc = wholeDay
+                    ? "Full venue (whole day)"
+                    : slot
+                      ? `${slot.label}${slot.timeLabel ? ` · ${slot.timeLabel}` : ""}`
+                      : "Venue hire";
+                  setLinesAndTotal([
+                    newContractLine({
+                      description: desc,
+                      unitCostCents: cents,
+                    }),
+                  ]);
+                }}
               >
                 Use this
               </button>
